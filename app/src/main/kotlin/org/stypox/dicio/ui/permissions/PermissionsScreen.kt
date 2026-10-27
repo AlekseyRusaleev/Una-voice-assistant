@@ -209,6 +209,31 @@ private fun permissionStates(context: Context): List<PermissionState> {
         ) { _, launcher -> launcher.launch(arrayOf(Manifest.permission.CALL_PHONE)) },
 
         PermissionState(
+            title = "СМС",
+            detail = "«Отправь смс Юле: я задержусь»",
+            granted = granted(Manifest.permission.SEND_SMS),
+            runtime = true,
+            permission = Manifest.permission.SEND_SMS,
+        ) { _, launcher -> launcher.launch(arrayOf(Manifest.permission.SEND_SMS)) },
+
+        PermissionState(
+            title = "Календарь",
+            detail = "«Запиши в календарь завтра в 15:00 врач»",
+            granted = granted(Manifest.permission.READ_CALENDAR) &&
+                granted(Manifest.permission.WRITE_CALENDAR),
+            runtime = true,
+            permission = if (granted(Manifest.permission.READ_CALENDAR))
+                Manifest.permission.WRITE_CALENDAR else Manifest.permission.READ_CALENDAR,
+        ) { _, launcher ->
+            launcher.launch(
+                arrayOf(
+                    Manifest.permission.READ_CALENDAR,
+                    Manifest.permission.WRITE_CALENDAR,
+                )
+            )
+        },
+
+        PermissionState(
             title = "Доступ к уведомлениям",
             detail = "Управление плеером, чтение и ответ на сообщения",
             granted = listenerEnabled,

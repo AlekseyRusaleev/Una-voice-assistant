@@ -1,12 +1,15 @@
 package org.stypox.dicio.eval
 
+import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ComponentName
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaSessionManager
@@ -14,8 +17,11 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.provider.AlarmClock
+import android.provider.CalendarContract
+import android.telephony.SmsManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import org.stypox.dicio.R
 import org.stypox.dicio.notes.Notes
@@ -25,6 +31,7 @@ import org.stypox.dicio.skills.notify.NotifyHandler
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Everyday commands that do not need the wake grammar: notes, reminders, alarms, playback info,
@@ -44,10 +51,49 @@ object Extras {
         """(?:включи|найди|поищи|открой)\s+(?:на\s+)?ютуб\w*\s+(.+)""", RegexOption.IGNORE_CASE
     )
     private val NUMBER = Regex("""[\d\s\-()]{5,}""")
+    private val CALENDAR = Regex(
+        """(?:запиши|записать|добавь|поставь|создай|назначь)\s+в\s+календар\w*\s+(.+)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val SMS = Regex(
+        """(?:отправь|отправить|напиши|пошли|скинь|шлепни)\s+(?:смс|эсэмэс|сообщение)\s+(.+)""",
+        RegexOption.IGNORE_CASE,
+    )
     private val OPEN_APP = Regex("""открой\s+(.+)""", RegexOption.IGNORE_CASE)
 
     /** @return true when the phrase was handled here. */
     fun handle(context: Context, text: String, utterance: String): Boolean {
+        // ---- calendar first: the notes handler below also matches "запиши ..."
+        CALENDAR.find(text)?.let { match ->
+            val rest = match.groupValues[1].trim()
+            if (rest.length >= 2) {
+                addCalendarEvent(context, rest)
+                return true
+            }
+        }
+
+        // ---- sms before the quick reply handler, which also matches "напиши ..."
+        // the raw utterance keeps punctuation, so «смс маме: привет» still splits by the colon
+        val spoken = if (utterance.isBlank()) text else utterance.lowercase().replace('ё', 'е')
+        (SMS.find(spoken) ?: SMS.find(text))?.let { match ->
+            val body = match.groupValues[1].trim()
+            val separator = body.indexOfAny(charArrayOf(':', '：', '—', ','))
+            val who: String
+            val message: String
+            if (separator > 0) {
+                who = body.substring(0, separator).trim()
+                message = body.substring(separator + 1).trim()
+            } else {
+                val parts = body.split(' ', limit = 2)
+                who = parts.getOrNull(0).orEmpty()
+                message = parts.getOrNull(1).orEmpty()
+            }
+            if (who.isNotEmpty() && message.length >= 2) {
+                sendSms(context, who, message)
+                return true
+            }
+        }
+
         // ---- notes
         NOTE_DELETE.find(text)?.let { match ->
             val query = match.groupValues[1].trim()
@@ -215,6 +261,124 @@ object Extras {
         }
 
         return false
+    }
+
+    /** Creates a calendar event, silently when it is allowed and through the calendar app otherwise. */
+    private fun addCalendarEvent(context: Context, rest: String) {
+        val begin = When.parse(rest) ?: (System.currentTimeMillis() + 3_600_000L)
+        val title = cleanEvent(rest)
+        val end = begin + 3_600_000L
+        val label = SimpleDateFormat("dd.MM в HH:mm", Locale.getDefault()).format(Date(begin))
+
+        if (silentInsertEvent(context, title, begin, end)) {
+            notify(context, "Записано в календарь: $label", title)
+            return
+        }
+
+        val intent = Intent(Intent.ACTION_INSERT).apply {
+            data = CalendarContract.Events.CONTENT_URI
+            putExtra(CalendarContract.Events.TITLE, title)
+            putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, begin)
+            putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+            notify(context, "Событие: $label", "$title\nОсталось нажать «Сохранить»")
+        } catch (t: Throwable) {
+            Log.w(TAG, "cannot open the calendar", t)
+            notify(context, "Календарь", "Не нашёл приложение календаря")
+        }
+    }
+
+    /** Inserts the event straight into the default writable calendar. Needs READ/WRITE_CALENDAR. */
+    private fun silentInsertEvent(context: Context, title: String, begin: Long, end: Long): Boolean {
+        val read = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR)
+        val write = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR)
+        if (read != PackageManager.PERMISSION_GRANTED ||
+            write != PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        return try {
+            val projection = arrayOf(CalendarContract.Calendars._ID)
+            val selection = CalendarContract.Calendars.VISIBLE + "=1 AND " +
+                CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL + ">=?"
+            val args = arrayOf(CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR.toString())
+            val calendarId = context.contentResolver
+                .query(CalendarContract.Calendars.CONTENT_URI, projection, selection, args, null)
+                ?.use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+                ?: return false
+
+            val values = ContentValues().apply {
+                put(CalendarContract.Events.DTSTART, begin)
+                put(CalendarContract.Events.DTEND, end)
+                put(CalendarContract.Events.TITLE, title)
+                put(CalendarContract.Events.CALENDAR_ID, calendarId)
+                put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+            }
+            context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values) != null
+        } catch (t: Throwable) {
+            Log.w(TAG, "cannot insert the event silently", t)
+            false
+        }
+    }
+
+    /** Strips the command and time words so the event title reads naturally. */
+    private fun cleanEvent(text: String): String =
+        text.replace(
+            Regex("""(?:запиши|записать|добавь|поставь|создай|назначь|мне|пожалуйста)""",
+                RegexOption.IGNORE_CASE), " ",
+        )
+            .replace(Regex("""в\s+календар\w*""", RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("""через\s+\d+\s*(?:минут\w*|час\w*|секунд\w*)""", RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("""\bв\s+\d{1,2}(?:[:.]\d{2})?(?:\s*(?:час\w*|утра|вечера|дня|ночи))?""",
+                RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("""\b(?:завтра|сегодня|послезавтра|утра|вечера|дня|ночи)\b""",
+                RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+            .ifBlank { "Событие" }
+
+    /** Sends an SMS: the recipient is either a spoken number or a contact name. */
+    private fun sendSms(context: Context, spokenTo: String, message: String) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notify(
+                context, "СМС",
+                "Нет разрешения на отправку СМС. Включите его в Una → Разрешения.",
+            )
+            return
+        }
+        val number = numberFrom(spokenTo)?.let(::normalizeNumber)
+            ?: Contacts.findNumber(context, spokenTo)
+        if (number == null) {
+            notify(context, "СМС", "Не нашёл контакт «$spokenTo». Скажите номер или имя из книги.")
+            return
+        }
+        try {
+            val manager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                context.getSystemService(SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                SmsManager.getDefault()
+            } ?: throw IllegalStateException("нет SmsManager")
+            manager.sendMultipartTextMessage(number, null, manager.divideMessage(message), null, null)
+            notify(context, "СМС отправлено на $number", message)
+        } catch (t: Throwable) {
+            Log.w(TAG, "cannot send an sms", t)
+            notify(context, "СМС", "Не получилось отправить: ${t.message ?: "ошибка"}")
+        }
+    }
+
+    /** Russian numbers are said as 10 digits; add the country code so the SMS actually leaves. */
+    private fun normalizeNumber(digits: String): String = when {
+        digits.length == 10 && digits.startsWith("9") -> "+7$digits"
+        digits.length == 11 && digits.startsWith("8") -> "+7" + digits.substring(1)
+        digits.startsWith("+") -> digits
+        digits.length > 11 -> "+$digits"
+        else -> digits
     }
 
     /** Finds a launchable app whose label starts with or contains the spoken name. */

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.AccessAlarm
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.MusicNote
@@ -61,6 +62,8 @@ private val unaAbilities = listOf(
     Ability(Icons.Default.VolumeUp, "Громкость", "Громкость на 7"),
     Ability(Icons.Default.Notifications, "Чтение сообщений", "Что мне писали?"),
     Ability(Icons.Default.Send, "Ответ на сообщение", "Ответь Васе: буду через час"),
+    Ability(Icons.Default.Email, "СМС", "Отправь смс Юле: я задержусь"),
+    Ability(Icons.Default.DateRange, "Календарь", "Запиши в календарь завтра в 15:00 врач"),
     Ability(Icons.Default.PlayArrow, "YouTube", "Включи на Ютубе котиков"),
     Ability(Icons.Default.MusicNote, "Яндекс Музыка", "Включи мою волну"),
     Ability(Icons.Default.Apps, "Открыть приложение", "Открой Телеграм"),
