@@ -22,6 +22,7 @@ import androidx.core.content.getSystemService
 object FastCommands {
     private const val TAG = "FastCommands"
     private const val YANDEX_MUSIC_PACKAGE = "ru.yandex.music"
+    private const val RESUME_DELAY_MILLIS = 1800L
 
     private val VOLUME = Regex(
         """(?:громкост|звук)\D{0,15}?(\d{1,3}|[а-я]+)""",
@@ -285,24 +286,42 @@ object FastCommands {
         }
     }
 
+    /**
+     * Opens Yandex Music. Deep links like "yandexmusic://wave" are not supported by the app (it
+     * shows "Нет такой страницы"), so we simply open the app and try to resume playback with a
+     * media key. Selecting a section inside the app needs accessibility, which we do not use yet.
+     */
     private fun openYandexMusic(context: Context, section: String): Boolean {
-        val candidates = listOf(
-            Intent(Intent.ACTION_VIEW, Uri.parse("yandexmusic://$section")),
-            context.packageManager.getLaunchIntentForPackage(YANDEX_MUSIC_PACKAGE),
-        )
-        for (intent in candidates) {
-            if (intent == null) {
-                continue
+        val launch = context.packageManager.getLaunchIntentForPackage(YANDEX_MUSIC_PACKAGE)
+            ?: run {
+                Extras.notify(context, "Яндекс Музыка", "Приложение не установлено")
+                return false
             }
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try {
-                context.startActivity(intent)
-                Log.d(TAG, "opened Yandex Music ($section)")
-                return true
-            } catch (t: Throwable) {
-                Log.d(TAG, "cannot open Yandex Music ($section): ${t.message}")
-            }
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(launch)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    val audio = context.getSystemService<AudioManager>()
+                    audio?.dispatchMediaKeyEvent(
+                        KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY)
+                    )
+                    audio?.dispatchMediaKeyEvent(
+                        KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY)
+                    )
+                } catch (t: Throwable) {
+                    Log.w(TAG, "cannot resume playback", t)
+                }
+            }, RESUME_DELAY_MILLIS)
+            Extras.notify(
+                context, "Яндекс Музыка",
+                if (section == "wave") "Открыл приложение. Если «Моя волна» не заиграла — нажмите ▶"
+                else "Открыл приложение. Раздел «Мне нравится» — вручную",
+            )
+            true
+        } catch (t: Throwable) {
+            Log.w(TAG, "cannot open Yandex Music", t)
+            false
         }
-        return false
-    }
+}
 }
