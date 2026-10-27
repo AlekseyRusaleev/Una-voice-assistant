@@ -197,6 +197,9 @@ class WakeService : Service() {
         var speechInProgress = false
         var silentMillis = 0L
         var lastHeardSecond = 0L
+        // the gate adapts to the room: a fixed threshold is either deaf in a quiet room or open
+        // all the time next to a TV
+        var noiseFloor = 0.0
 
         try {
             ar.startRecording()
@@ -208,7 +211,10 @@ class WakeService : Service() {
                 rememberFrame(frame, read)
 
                 val level = rms(frame, read)
-                val gateOpen = level > GATE_RMS
+                val gateOpen = level > maxOf(MIN_GATE_RMS, noiseFloor * GATE_FACTOR)
+                if (!gateOpen) {
+                    noiseFloor = if (noiseFloor <= 0.0) level else noiseFloor * 0.98 + level * 0.02
+                }
                 if (gateOpen) {
                     speechInProgress = true
                     silentMillis = 0
@@ -609,17 +615,17 @@ class WakeService : Service() {
         /** Journal upload and updater tick: the updater itself only acts every few hours. */
         private const val MAINTENANCE_INTERVAL_MILLIS = 30L * 60 * 1000
 
-        /**
-         * Level above which a frame is considered speech. Quiet rooms stay far below it, and only
-         * speech is decoded, which is where most of the always-on battery went.
-         */
-        private const val GATE_RMS = 700.0
+        /** Speaking level, relative to the measured noise floor of the room. */
+        private const val GATE_FACTOR = 2.5
+
+        /** Absolute minimum so that a near-silent room does not open the gate on its own noise. */
+        private const val MIN_GATE_RMS = 180.0
 
         /** How long speech is assumed to continue after the level dropped. */
         private const val GATE_HANGOVER_MILLIS = 600
 
         /** Frames kept while silent, so a quiet start of the name is not lost. */
-        private const val PREROLL_FRAMES = 6
+        private const val PREROLL_FRAMES = 8
 
         /** Fed to the decoder to close the utterance after speech stops. */
         private val SILENCE_FRAME = ShortArray(1280)
