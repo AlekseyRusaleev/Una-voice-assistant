@@ -63,14 +63,18 @@ object Updater {
     /**
      * Full synchronous check: fetches the version, downloads the APK if it is newer and posts the
      * install notification. Blocking — call it from a background dispatcher.
+     *
+     * @param onStage reports what is happening right now, so that the UI can show progress instead
+     * of a silent pause: a 57 MB download takes a while on mobile data.
      */
-    fun checkNow(context: Context): UpdateStatus {
+    fun checkNow(context: Context, onStage: (String) -> Unit = {}): UpdateStatus {
         val installedCode = BuildConfig.VERSION_CODE
         val installedName = BuildConfig.VERSION_NAME
 
         fun error(text: String, remoteCode: Int = 0, remoteName: String = "") =
             UpdateStatus(installedCode, installedName, remoteCode, remoteName, Outcome.ERROR, text)
 
+        onStage("Спрашиваю сервер…")
         val info = fetchVersion() ?: return error("Сервер обновлений недоступен: нет ответа на $BASE_URL")
         val remoteCode = info.optInt("versionCode", 0)
         val remoteName = info.optString("versionName", "новая")
@@ -89,9 +93,21 @@ object Updater {
         file.parentFile?.mkdirs()
         file.delete()
 
-        download(url, file)?.let { reason ->
+        onStage("Скачиваю ${remoteName}…")
+        download(url, file) { done, total ->
+            val doneMb = done / 1024 / 1024
+            onStage(
+                if (total > 0) {
+                    "Скачиваю $doneMb из ${total / 1024 / 1024} МБ…"
+                } else {
+                    "Скачиваю $doneMb МБ…"
+                }
+            )
+        }?.let { reason ->
             return error("Не удалось скачать: $reason", remoteCode, remoteName)
         }
+
+        onStage("Проверяю контрольную сумму…")
         if (expected.isNotEmpty() && sha256(file) != expected) {
             val size = file.length() / 1024 / 1024
             file.delete()
@@ -160,7 +176,11 @@ object Updater {
     }
 
     /** @return null on success, or a short human-readable reason for the failure. */
-    private fun download(url: String, target: File): String? = try {
+    private fun download(
+        url: String,
+        target: File,
+        onProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
+    ): String? = try {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15000
             readTimeout = 60000
@@ -171,8 +191,25 @@ object Updater {
             Log.w(TAG, "APK download HTTP $code")
             "сервер ответил $code"
         } else {
+            val total = connection.contentLengthLong.coerceAtLeast(0L)
             connection.inputStream.use { input ->
-                target.outputStream().use { output -> input.copyTo(output, 256 * 1024) }
+                target.outputStream().use { output ->
+                    val buffer = ByteArray(256 * 1024)
+                    var done = 0L
+                    var lastReport = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        output.write(buffer, 0, read)
+                        done += read
+                        // report at most every 2 MB so the UI is not flooded with updates
+                        if (done - lastReport >= 2 * 1024 * 1024) {
+                            lastReport = done
+                            onProgress(done, total)
+                        }
+                    }
+                    onProgress(done, total)
+                }
             }
             connection.disconnect()
             if (target.length() < 1024 * 1024) {

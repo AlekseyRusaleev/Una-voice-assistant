@@ -272,7 +272,9 @@ private fun UpdateCard(onResult: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
+    var stage by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<Updater.UpdateStatus?>(null) }
+    var dialog by remember { mutableStateOf<Updater.UpdateStatus?>(null) }
     val notifications = remember { Updater.notificationsEnabled(context) }
 
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
@@ -301,6 +303,16 @@ private fun UpdateCard(onResult: (String) -> Unit) {
                     else MaterialTheme.colorScheme.primary,
                 )
             }
+            if (busy && stage.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
             if (!notifications) {
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -316,9 +328,12 @@ private fun UpdateCard(onResult: (String) -> Unit) {
                     enabled = !busy,
                     onClick = {
                         busy = true
+                        stage = "Спрашиваю сервер…"
                         scope.launch {
                             val result = withContext(Dispatchers.IO) {
-                                runCatching { Updater.checkNow(context) }.getOrElse { error ->
+                                runCatching {
+                                    Updater.checkNow(context) { newStage -> stage = newStage }
+                                }.getOrElse { error ->
                                     Updater.UpdateStatus(
                                         BuildConfig.VERSION_CODE,
                                         BuildConfig.VERSION_NAME,
@@ -329,8 +344,12 @@ private fun UpdateCard(onResult: (String) -> Unit) {
                                     )
                                 }
                             }
+                            stage = ""
                             status = result
                             busy = false
+                            // a small grey line was too easy to miss, so the result is shown
+                            // in a dialog the user has to acknowledge
+                            dialog = result
                             onResult("Обновление: ${result.message}")
                         }
                     },
@@ -352,6 +371,51 @@ private fun UpdateCard(onResult: (String) -> Unit) {
                 }
             }
         }
+    }
+
+    val current = dialog
+    if (current != null) {
+        val apk = current.apk
+        AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = {
+                Text(
+                    when (current.outcome) {
+                        Updater.Outcome.UP_TO_DATE -> "Обновлений нет"
+                        Updater.Outcome.READY_TO_INSTALL -> "Обновление скачано"
+                        Updater.Outcome.ERROR -> "Не удалось проверить"
+                    }
+                )
+            },
+            text = {
+                Text(
+                    buildString {
+                        append("Установлено: ${current.installedName} (код ${current.installedCode})")
+                        if (current.remoteCode > 0) {
+                            append("\nНа сервере: ${current.remoteName} (код ${current.remoteCode})")
+                        }
+                        append("\n\n${current.message}")
+                    }
+                )
+            },
+            confirmButton = {
+                if (current.outcome == Updater.Outcome.READY_TO_INSTALL && apk != null) {
+                    TextButton(onClick = {
+                        dialog = null
+                        if (!Updater.installNow(context, apk)) {
+                            onResult("Обновление: установщик не открылся")
+                        }
+                    }) { Text("Установить") }
+                } else {
+                    TextButton(onClick = { dialog = null }) { Text("Закрыть") }
+                }
+            },
+            dismissButton = if (current.outcome == Updater.Outcome.READY_TO_INSTALL && apk != null) {
+                { TextButton(onClick = { dialog = null }) { Text("Позже") } }
+            } else {
+                null
+            },
+        )
     }
 }
 
