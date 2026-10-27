@@ -17,7 +17,6 @@ object RemoteConfig {
     private const val TAG = "RemoteConfig"
 
     const val DEFAULT_URL = "https://9.247.112.23.sslip.io"
-    const val DEFAULT_TOKEN = "9d51cf1c6faa332bc3d8d2d60d6518353a3ab0924ba43396"
 
     data class Config(
         val previous: List<String>,
@@ -76,13 +75,14 @@ object RemoteConfig {
     }
 
     /** Downloads the dictionary in the background; failures are silently ignored. */
-    fun refresh(context: Context, url: String = DEFAULT_URL, token: String = DEFAULT_TOKEN) {
+    fun refresh(context: Context, url: String = DEFAULT_URL) {
         thread(name = "una-config") {
             try {
+                // no token: the dictionary is public, and shipping a shared key in the app only
+                // handed it to anyone who unpacked the APK
                 val connection = (URL("$url/config").openConnection() as HttpURLConnection).apply {
                     connectTimeout = 5000
                     readTimeout = 5000
-                    setRequestProperty("X-Una-Token", token)
                 }
                 if (connection.responseCode != 200) {
                     Log.w(TAG, "config: HTTP ${connection.responseCode}")
