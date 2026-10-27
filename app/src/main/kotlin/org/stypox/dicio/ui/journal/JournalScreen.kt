@@ -105,6 +105,7 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
                 percent = model.percent,
                 downloadedMb = model.downloadedBytes / (1024 * 1024),
                 totalMb = model.totalBytes / (1024 * 1024),
+                error = model.error,
                 onDownload = { GigaAmModel.downloadIfNeeded(context) },
             )
 
@@ -226,6 +227,7 @@ private fun ModelCard(
     percent: Int,
     downloadedMb: Long,
     totalMb: Long,
+    error: String?,
     onDownload: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
@@ -255,12 +257,24 @@ private fun ModelCard(
 
                 else -> {
                     Text(
-                        text = "Не скачана (~$totalMb МБ). Без неё команды понимаются хуже.",
+                        text = if (downloadedMb > 0) {
+                            "Скачано $downloadedMb из $totalMb МБ. Можно продолжить с этого места."
+                        } else {
+                            "Не скачана (~$totalMb МБ). Без неё команды понимаются хуже."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    if (error != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Ошибка: $error",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = onDownload) {
-                        Text("Скачать")
+                        Text(if (downloadedMb > 0) "Продолжить" else "Скачать")
                     }
                 }
             }
