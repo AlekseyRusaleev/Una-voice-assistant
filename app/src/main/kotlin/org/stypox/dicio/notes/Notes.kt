@@ -37,6 +37,7 @@ object Notes {
         val note = Note(counter.incrementAndGet(), text.trim(), System.currentTimeMillis())
         val list = (all(context) + note).takeLast(500)
         save(context, list)
+        NotesExport.autoExport(context, note)
         return note
     }
 

@@ -44,6 +44,7 @@ import org.stypox.dicio.eval.Journal
 import org.stypox.dicio.eval.Uplink
 import org.stypox.dicio.io.input.gigaam.GigaAmModel
 import org.stypox.dicio.io.wake.WakeStats
+import org.stypox.dicio.notes.NotesSync
 
 /**
  * Shows the last recognised phrases together with what happened to them, so that a wrong command
@@ -61,6 +62,7 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
     var strict by remember { mutableStateOf(WakeStats.isStrict(context)) }
     var uplink by remember { mutableStateOf(Uplink.isEnabled(context)) }
     var showConsent by remember { mutableStateOf(false) }
+    var notesServer by remember { mutableStateOf(NotesSync.isServerAllowed(context)) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -96,6 +98,27 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
                 downloadedMb = model.downloadedBytes / (1024 * 1024),
                 totalMb = model.totalBytes / (1024 * 1024),
                 onDownload = { GigaAmModel.downloadIfNeeded(context) },
+            )
+
+            NotesUploadCard(
+                enabled = notesServer,
+                onToggle = {
+                    notesServer = it
+                    NotesSync.setServerAllowed(context, it)
+                },
+                onUpload = {
+                    NotesSync.push(context) { sent ->
+                        org.stypox.dicio.eval.Extras.notify(
+                            context, "Заметки",
+                            when {
+                                sent == -2 -> "Отправка на сервер выключена"
+                                sent < 0 -> "Не удалось отправить: нет связи или токена"
+                                sent == 0 -> "Всё уже отправлено"
+                                else -> "Отправлено заметок: $sent"
+                            },
+                        )
+                    }
+                },
             )
 
             StatsCard(
@@ -278,6 +301,31 @@ private fun StatsCard(
             }
             TextButton(onClick = onReset, modifier = Modifier.align(Alignment.End)) {
                 Text("Сбросить счётчики")
+            }
+        }
+    }
+}
+@Composable
+private fun NotesUploadCard(
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onUpload: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text("Для опытных: заметки на сервер", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "По умолчанию заметки остаются на телефоне. Здесь можно включить отправку на сервер " +
+                    "помощника — обычно это не нужно, достаточно экспорта в свою папку.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(checked = enabled, onCheckedChange = onToggle)
+                Spacer(Modifier.padding(horizontal = 8.dp))
+                TextButton(onClick = onUpload) { Text("Отправить сейчас") }
             }
         }
     }
