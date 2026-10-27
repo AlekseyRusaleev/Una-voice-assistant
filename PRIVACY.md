@@ -7,3 +7,17 @@ Dicio contains multiple skills, that is separate components that provide service
 The voice recognition in Dicio works offline, without ever sending audio to any external service. Once the Vosk AI Speech-To-Text model has been downloaded, Dicio can use it without needing to connect to the internet ever again. Therefore, once the STT model is ready, Dicio can be used without an internet connection, except for skills that need to find information on the internet (for example, the timer will work, while the weather will not). If the user wishes to, he can disable Dicio's access to the internet from Android settings, and the app will continue working normally. The user may even disable voice recognition completely from application settings.
 
 The user can easily delete all of his personal data by just clearing the app's storage from Android settings, or by uninstalling the app completely.
+
+## Una-specific additions
+
+- **Notes** are stored only on the device. They can be exported to a folder the user picks (for
+  example an Obsidian vault); nothing is uploaded unless the user explicitly enables the "for
+  advanced users" upload card and confirms the consent dialog.
+- **SMS** are sent through the phone's own `SmsManager` when the user grants `SEND_SMS`. The text is
+  never sent to Una's server and is not stored by the app; only a local notification confirms it.
+- **Calendar** events are written to the calendar chosen on the device when `READ_CALENDAR` and
+  `WRITE_CALENDAR` are granted; otherwise the system calendar app is opened with the event
+  pre-filled and the user saves it manually.
+- **Contacts** are read locally, only to resolve a spoken name into a phone number; the address book
+  never leaves the device.
+
