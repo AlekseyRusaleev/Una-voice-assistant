@@ -23,6 +23,8 @@ import org.stypox.dicio.settings.SkillSettingsScreen
 import org.stypox.dicio.ui.about.AboutScreen
 import org.stypox.dicio.ui.home.HomeScreen
 import org.stypox.dicio.ui.journal.JournalScreen
+import org.stypox.dicio.ui.notes.NotesScreen
+import org.stypox.dicio.ui.permissions.PermissionsScreen
 
 @Composable
 fun Navigation() {
@@ -45,6 +47,8 @@ fun Navigation() {
                 onSettingsClick = { navController.navigate(MainSettings) },
                 onAboutClick = { navController.navigate(About) },
                 onJournalClick = { navController.navigate(Journal) },
+                onNotesClick = { navController.navigate(Notes) },
+                onPermissionsClick = { navController.navigate(Permissions) },
                 onSpeechToTextPopupClick = {
                     val intent = Intent(context, SttPopupActivity::class.java)
                     context.startActivity(intent)
@@ -56,6 +60,14 @@ fun Navigation() {
 
         composable<Journal> {
             JournalScreen(navigationIcon = backIcon)
+        }
+
+        composable<Notes> {
+            NotesScreen(navigationIcon = backIcon)
+        }
+
+        composable<Permissions> {
+            PermissionsScreen(navigationIcon = backIcon)
         }
 
         composable<MainSettings> {
@@ -80,6 +92,8 @@ fun ScreenWithDrawer(
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onJournalClick: () -> Unit,
+    onNotesClick: () -> Unit,
+    onPermissionsClick: () -> Unit,
     onSpeechToTextPopupClick: () -> Unit,
     screen: @Composable (navigationIcon: @Composable () -> Unit) -> Unit
 ) {
@@ -93,6 +107,8 @@ fun ScreenWithDrawer(
                 onSettingsClick = onSettingsClick,
                 onAboutClick = onAboutClick,
                 onJournalClick = onJournalClick,
+                onNotesClick = onNotesClick,
+                onPermissionsClick = onPermissionsClick,
                 onSpeechToTextPopupClick = onSpeechToTextPopupClick,
                 closeDrawer = {
                     scope.launch {

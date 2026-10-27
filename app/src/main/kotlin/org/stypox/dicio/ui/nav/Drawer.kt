@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Settings
@@ -39,6 +41,8 @@ fun DrawerContent(
     onAboutClick: () -> Unit,
     onSpeechToTextPopupClick: () -> Unit,
     onJournalClick: () -> Unit,
+    onNotesClick: () -> Unit,
+    onPermissionsClick: () -> Unit,
     closeDrawer: () -> Unit,
 ) {
     ModalDrawerSheet(
@@ -83,6 +87,26 @@ fun DrawerContent(
         )
 
         DrawerItem(
+            icon = Icons.Default.Edit,
+            label = R.string.notes,
+            onClick = {
+                onNotesClick()
+                closeDrawer()
+            },
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
+
+        DrawerItem(
+            icon = Icons.Default.Lock,
+            label = R.string.permissions,
+            onClick = {
+                onPermissionsClick()
+                closeDrawer()
+            },
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
+
+        DrawerItem(
             icon = Icons.Default.Info,
             label = R.string.about,
             onClick = {
@@ -97,7 +121,7 @@ fun DrawerContent(
 @Preview
 @Composable
 private fun DrawerContentPreview() {
-    DrawerContent(onSettingsClick = {}, onAboutClick = {}, onSpeechToTextPopupClick = {}, onJournalClick = {}, closeDrawer = {})
+    DrawerContent(onSettingsClick = {}, onAboutClick = {}, onSpeechToTextPopupClick = {}, onJournalClick = {}, onNotesClick = {}, onPermissionsClick = {}, closeDrawer = {})
 }
 
 @Preview

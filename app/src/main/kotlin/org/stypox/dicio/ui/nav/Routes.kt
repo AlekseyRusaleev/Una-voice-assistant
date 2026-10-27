@@ -16,3 +16,9 @@ object About
 
 @Serializable
 object Journal
+
+@Serializable
+object Notes
+
+@Serializable
+object Permissions
