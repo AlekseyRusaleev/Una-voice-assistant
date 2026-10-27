@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +37,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,10 +58,16 @@ import androidx.core.content.ContextCompat
 fun PermissionsScreen(navigationIcon: @Composable () -> Unit) {
     val context = LocalContext.current
     var refresh by remember { mutableIntStateOf(0) }
+    // permissions the system refused to show a dialog for: from then on only the app settings page
+    // can grant them, so the button has to lead there instead of silently doing nothing
+    var refused by remember { mutableStateOf(emptySet<String>()) }
 
     val runtimeLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { refresh++ }
+    ) { result ->
+        refused = refused + result.filterValues { it.not() }.keys
+        refresh++
+    }
 
     val items = remember(refresh) { permissionStates(context) }
     val missingRuntime = items.filter { it.runtime && !it.granted }.mapNotNull { it.permission }
@@ -80,7 +88,24 @@ fun PermissionsScreen(navigationIcon: @Composable () -> Unit) {
                 "Без этих разрешений часть функций не работает. Галочка — всё в порядке.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+                Text(
+                    "Android и оболочки вроде Infinix/XOS не дают выдать часть прав изнутри " +
+                        "приложения: «СМС», доступ к уведомлениям и работа в фоне открываются " +
+                        "только в настройках. Если диалог больше не появляется — жмите кнопку " +
+                        "«Настройки» у строки. Для доступа к уведомлениям на Android 13+ ещё " +
+                        "нужно: Настройки → Приложения → Una → ⋮ → «Разрешить ограниченные " +
+                        "настройки», затем включить переключатель доступа.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
 
             for (item in items) {
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -103,10 +128,23 @@ fun PermissionsScreen(navigationIcon: @Composable () -> Unit) {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            if (!item.granted && item.settingsOnly) {
+                                Text(
+                                    "Выдаётся только в настройках приложения",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
                         }
                         if (!item.granted) {
-                            TextButton(onClick = { item.open(context, runtimeLauncher) }) {
-                                Text("Разрешить")
+                            val blocked = item.permission != null && item.permission in refused
+                            TextButton(
+                                onClick = {
+                                    if (blocked || item.settingsOnly) openAppSettings(context)
+                                    else item.open(context, runtimeLauncher)
+                                }
+                            ) {
+                                Text(if (blocked || item.settingsOnly) "Настройки" else "Разрешить")
                             }
                         }
                     }
@@ -118,9 +156,36 @@ fun PermissionsScreen(navigationIcon: @Composable () -> Unit) {
                 TextButton(onClick = { runtimeLauncher.launch(missingRuntime.toTypedArray()) }) {
                     Text("Запросить все сразу")
                 }
+                Text(
+                    "Если после нажатия ничего не произошло — система заблокировала запрос. " +
+                        "Каждое право придётся выдать в настройках приложения.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Spacer(Modifier.height(12.dp))
+            TextButton(onClick = { openAppSettings(context) }) {
+                Text("Настройки приложения")
+            }
             TextButton(onClick = { refresh++ }) { Text("Проверить снова") }
+        }
+    }
+}
+
+/** Opens the system screen where blocked permissions can actually be granted. */
+private fun openAppSettings(context: Context) {
+    try {
+        context.startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.parse("package:" + context.packageName))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    } catch (t: Throwable) {
+        try {
+            context.startActivity(
+                Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: Throwable) {
         }
     }
 }
@@ -131,6 +196,8 @@ private class PermissionState(
     val granted: Boolean,
     val runtime: Boolean = false,
     val permission: String? = null,
+    /** True for rows that can never be granted by a dialog, only from the settings screen. */
+    val settingsOnly: Boolean = false,
     val open: (Context, androidx.activity.result.ActivityResultLauncher<Array<String>>) -> Unit,
 )
 
@@ -210,7 +277,7 @@ private fun permissionStates(context: Context): List<PermissionState> {
 
         PermissionState(
             title = "СМС",
-            detail = "«Отправь смс Юле: я задержусь»",
+            detail = "«Отправь смс Юле: я задержусь». Без права откроется чат с готовым текстом",
             granted = granted(Manifest.permission.SEND_SMS),
             runtime = true,
             permission = Manifest.permission.SEND_SMS,
@@ -237,12 +304,14 @@ private fun permissionStates(context: Context): List<PermissionState> {
             title = "Доступ к уведомлениям",
             detail = "Управление плеером, чтение и ответ на сообщения",
             granted = listenerEnabled,
+            settingsOnly = true,
         ) { ctx, _ -> openSettingsCtx(ctx, Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS) },
 
         PermissionState(
             title = "Точные будильники",
             detail = "Напоминания срабатывают минута в минуту",
             granted = exactAlarms,
+            settingsOnly = true,
         ) { ctx, _ ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 openSettingsCtx(ctx, Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
@@ -253,6 +322,7 @@ private fun permissionStates(context: Context): List<PermissionState> {
             title = "Установка обновлений",
             detail = "Приложение обновляет себя само",
             granted = canInstall,
+            settingsOnly = true,
         ) { ctx, _ ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 openSettingsCtx(
@@ -266,6 +336,7 @@ private fun permissionStates(context: Context): List<PermissionState> {
             title = "Работа в фоне",
             detail = "Система не усыпляет помощника",
             granted = batteryOk,
+            settingsOnly = true,
         ) { ctx, _ ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 openSettingsCtx(

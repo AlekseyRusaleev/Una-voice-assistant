@@ -342,33 +342,50 @@ object Extras {
 
     /** Sends an SMS: the recipient is either a spoken number or a contact name. */
     private fun sendSms(context: Context, spokenTo: String, message: String) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            notify(
-                context, "СМС",
-                "Нет разрешения на отправку СМС. Включите его в Una → Разрешения.",
-            )
-            return
-        }
         val number = numberFrom(spokenTo)?.let(::normalizeNumber)
             ?: Contacts.findNumber(context, spokenTo)
         if (number == null) {
             notify(context, "СМС", "Не нашёл контакт «$spokenTo». Скажите номер или имя из книги.")
             return
         }
+
+        // SEND_SMS is refused for many sideloaded apps and some ROMs, so the command must still
+        // work: fall back to the messaging app with the recipient and text already filled in.
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            try {
+                val manager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    context.getSystemService(SmsManager::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    SmsManager.getDefault()
+                } ?: throw IllegalStateException("нет SmsManager")
+                manager.sendMultipartTextMessage(
+                    number, null, manager.divideMessage(message), null, null,
+                )
+                notify(context, "СМС отправлено на $number", message)
+                return
+            } catch (t: Throwable) {
+                Log.w(TAG, "cannot send an sms silently", t)
+            }
+        }
+
         try {
-            val manager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                context.getSystemService(SmsManager::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                SmsManager.getDefault()
-            } ?: throw IllegalStateException("нет SmsManager")
-            manager.sendMultipartTextMessage(number, null, manager.divideMessage(message), null, null)
-            notify(context, "СМС отправлено на $number", message)
+            val intent = Intent(
+                Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(number)),
+            ).apply {
+                putExtra("sms_body", message)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            notify(
+                context, "СМС на $number",
+                "$message\nОсталось нажать «Отправить»: система не даёт Una отправлять самой.",
+            )
         } catch (t: Throwable) {
-            Log.w(TAG, "cannot send an sms", t)
-            notify(context, "СМС", "Не получилось отправить: ${t.message ?: "ошибка"}")
+            Log.w(TAG, "cannot open the messaging app", t)
+            notify(context, "СМС", "Нет приложения для сообщений — отправка невозможна")
         }
     }
 
