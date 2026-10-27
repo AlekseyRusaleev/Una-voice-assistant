@@ -8,7 +8,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -43,6 +47,7 @@ fun Navigation() {
     NavHost(navController = navController, startDestination = Home) {
         composable<Home> {
             val context = LocalContext.current
+            askPermissionsOnFirstRun(context) { navController.navigate(Permissions) }
             ScreenWithDrawer(
                 onSettingsClick = { navController.navigate(MainSettings) },
                 onAboutClick = { navController.navigate(About) },
@@ -83,6 +88,20 @@ fun Navigation() {
 
         composable<About> {
             AboutScreen(navigationIcon = backIcon)
+        }
+    }
+}
+
+/** Opens the permissions screen once, when the microphone is missing (fresh install). */
+@Composable
+private fun askPermissionsOnFirstRun(context: android.content.Context, open: () -> Unit) {
+    val prefs = context.getSharedPreferences("una_first_run", android.content.Context.MODE_PRIVATE)
+    LaunchedEffect(Unit) {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted && !prefs.getBoolean("asked", false)) {
+            prefs.edit().putBoolean("asked", true).apply()
+            open()
         }
     }
 }

@@ -44,6 +44,7 @@ object Extras {
         """(?:включи|найди|поищи|открой)\s+(?:на\s+)?ютуб\w*\s+(.+)""", RegexOption.IGNORE_CASE
     )
     private val NUMBER = Regex("""[\d\s\-()]{5,}""")
+    private val OPEN_APP = Regex("""открой\s+(.+)""", RegexOption.IGNORE_CASE)
 
     /** @return true when the phrase was handled here. */
     fun handle(context: Context, text: String, utterance: String): Boolean {
@@ -187,6 +188,22 @@ object Extras {
             return true
         }
 
+        // ---- open an installed app by name
+        OPEN_APP.find(text)?.let { match ->
+            val name = match.groupValues[1].trim()
+            if (name.length >= 2) {
+                val intent = findApp(context, name)
+                if (intent != null) {
+                    try {
+                        context.startActivity(intent)
+                        return true
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "cannot launch app", t)
+                    }
+                }
+            }
+        }
+
         // ---- youtube search
         YOUTUBE.find(text)?.let { match ->
             val query = match.groupValues[1].trim()
@@ -198,6 +215,29 @@ object Extras {
         }
 
         return false
+    }
+
+    /** Finds a launchable app whose label starts with or contains the spoken name. */
+    private fun findApp(context: Context, name: String): Intent? {
+        val query = name.lowercase().replace('ё', 'е')
+        val manager = context.packageManager
+        return try {
+            manager.getInstalledApplications(0)
+                .asSequence()
+                .filter { manager.getLaunchIntentForPackage(it.packageName) != null }
+                .map { it to manager.getApplicationLabel(it).toString().lowercase().replace('ё', 'е') }
+                .filter { (_, label) -> label.isNotBlank() }
+                .sortedBy { (_, label) -> if (label.startsWith(query)) 0 else 1 }
+                .firstOrNull { (_, label) -> label.startsWith(query) || label.contains(query) }
+                ?.first
+                ?.let { info ->
+                    manager.getLaunchIntentForPackage(info.packageName)
+                        ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+        } catch (t: Throwable) {
+            Log.w(TAG, "cannot list apps", t)
+            null
+        }
     }
 
     /** Strips the command words so that the reminder text reads naturally. */

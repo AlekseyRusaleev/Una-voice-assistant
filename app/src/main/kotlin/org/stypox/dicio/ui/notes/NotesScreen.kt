@@ -32,7 +32,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import org.stypox.dicio.eval.Extras
 import org.stypox.dicio.notes.Notes
+import org.stypox.dicio.notes.NotesSync
 
 /**
  * Notes list: the same notes the assistant creates by voice, with manual adding and deleting.
@@ -67,6 +69,24 @@ fun NotesScreen(navigationIcon: @Composable () -> Unit) {
                         notes = Notes.all(context).reversed()
                     },
                 ) { Text("Добавить") }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(onClick = {
+                    NotesSync.push(context) { sent ->
+                        Extras.notify(
+                            context, "Заметки",
+                            when {
+                                sent < 0 -> "Не удалось отправить: нет связи или токена"
+                                sent == 0 -> "Всё уже отправлено"
+                                else -> "Отправлено заметок: $sent"
+                            },
+                        )
+                    }
+                }) { Text("Отправить на сервер") }
             }
 
             if (notes.isEmpty()) {
