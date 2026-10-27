@@ -34,17 +34,23 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.stypox.dicio.BuildConfig
 import org.stypox.dicio.eval.Journal
 import org.stypox.dicio.eval.Uplink
 import org.stypox.dicio.io.input.gigaam.GigaAmModel
 import org.stypox.dicio.io.wake.WakeStats
 import org.stypox.dicio.notes.NotesSync
+import org.stypox.dicio.update.Updater
 
 /**
  * Shows the last recognised phrases together with what happened to them, so that a wrong command
@@ -101,6 +107,8 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
                 totalMb = model.totalBytes / (1024 * 1024),
                 onDownload = { GigaAmModel.downloadIfNeeded(context) },
             )
+
+            UpdateCard(onResult = { Journal.record(context, it, "update") })
 
             NotesUploadCard(
                 enabled = notesServer,
@@ -252,6 +260,94 @@ private fun ModelCard(
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = onDownload) {
                         Text("Скачать")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateCard(onResult: (String) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<Updater.UpdateStatus?>(null) }
+    val notifications = remember { Updater.notificationsEnabled(context) }
+
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text("Обновления", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Установлено: ${BuildConfig.VERSION_NAME} (код ${BuildConfig.VERSION_CODE})",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            status?.let { current ->
+                Spacer(Modifier.height(6.dp))
+                if (current.remoteCode > 0) {
+                    Text(
+                        "На сервере: ${current.remoteName} (код ${current.remoteCode})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    current.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (current.outcome == Updater.Outcome.ERROR)
+                        MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (!notifications) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Уведомления выключены: предложение обновиться не покажется. " +
+                        "Включите их в разделе «Разрешения».",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    enabled = !busy,
+                    onClick = {
+                        busy = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                runCatching { Updater.checkNow(context) }.getOrElse { error ->
+                                    Updater.UpdateStatus(
+                                        BuildConfig.VERSION_CODE,
+                                        BuildConfig.VERSION_NAME,
+                                        0,
+                                        "",
+                                        Updater.Outcome.ERROR,
+                                        "Ошибка: ${error.message ?: error.javaClass.simpleName}",
+                                    )
+                                }
+                            }
+                            status = result
+                            busy = false
+                            onResult("Обновление: ${result.message}")
+                        }
+                    },
+                ) {
+                    Text(if (busy) "Проверяю…" else "Проверить обновление")
+                }
+
+                val apk = status?.apk
+                if (status?.outcome == Updater.Outcome.READY_TO_INSTALL && apk != null) {
+                    TextButton(
+                        onClick = {
+                            if (!Updater.installNow(context, apk)) {
+                                onResult("Обновление: установщик не открылся")
+                            }
+                        },
+                    ) {
+                        Text("Установить")
                     }
                 }
             }

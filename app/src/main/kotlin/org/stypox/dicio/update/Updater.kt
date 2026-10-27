@@ -21,8 +21,11 @@ import java.security.MessageDigest
 import kotlin.concurrent.thread
 
 /**
- * Self-update: asks the backend for the newest version, downloads the APK on Wi-Fi and offers to
- * install it. Android always asks the user to confirm the installation — that cannot be skipped.
+ * Self-update: asks the backend for the newest version, downloads the APK and offers to install it.
+ * Android always asks the user to confirm the installation — that cannot be skipped.
+ *
+ * Everything that happens here is reported as an [UpdateStatus] instead of being written to logcat
+ * only: when an update silently "does not arrive", the reason must be visible in the app.
  */
 object Updater {
     private const val TAG = "Updater"
@@ -30,45 +33,121 @@ object Updater {
     private const val CHANNEL_ID = "una_updates"
     private const val NOTIFICATION_ID = 424242
 
+    enum class Outcome { UP_TO_DATE, READY_TO_INSTALL, ERROR }
+
+    data class UpdateStatus(
+        val installedCode: Int,
+        val installedName: String,
+        val remoteCode: Int,
+        val remoteName: String,
+        val outcome: Outcome,
+        val message: String,
+        val apk: File? = null,
+    )
+
+    /** Background check used on start-up and from the wake service. */
     fun checkAndUpdate(context: Context) {
         thread(name = "una-update") {
-            try {
-                val info = fetchVersion() ?: return@thread
-                val remoteCode = info.optInt("versionCode", 0)
-                if (remoteCode <= BuildConfig.VERSION_CODE) {
-                    return@thread
+            val status = runCatching { checkNow(context) }
+                .getOrElse {
+                    Log.w(TAG, "update check failed", it)
+                    UpdateStatus(
+                        BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, 0, "",
+                        Outcome.ERROR, "Ошибка проверки: ${it.message ?: it.javaClass.simpleName}",
+                    )
                 }
-                val versionName = info.optString("versionName", "новая")
-                Log.i(TAG, "new version available: $versionName (wifi=${isOnWifi(context)})")
-                val url = info.optString("url", "$BASE_URL/download/una.apk")
-                val expected = info.optString("sha256", "").lowercase()
-                val file = File(context.cacheDir, "una-update.apk")
-                if (!download(url, file)) {
-                    return@thread
-                }
-                if (expected.isNotEmpty() && sha256(file) != expected) {
-                    Log.w(TAG, "checksum mismatch, update discarded")
-                    file.delete()
-                    return@thread
-                }
-                notify(
-                    context,
-                    "Обновление $versionName готово",
-                    "Нажмите, чтобы установить",
-                    installIntent(context, file),
-                )
-            } catch (t: Throwable) {
-                Log.w(TAG, "update check failed", t)
-            }
+            Log.i(TAG, "update: ${status.outcome} ${status.message}")
         }
     }
+
+    /**
+     * Full synchronous check: fetches the version, downloads the APK if it is newer and posts the
+     * install notification. Blocking — call it from a background dispatcher.
+     */
+    fun checkNow(context: Context): UpdateStatus {
+        val installedCode = BuildConfig.VERSION_CODE
+        val installedName = BuildConfig.VERSION_NAME
+
+        fun error(text: String, remoteCode: Int = 0, remoteName: String = "") =
+            UpdateStatus(installedCode, installedName, remoteCode, remoteName, Outcome.ERROR, text)
+
+        val info = fetchVersion() ?: return error("Сервер обновлений недоступен: нет ответа на $BASE_URL")
+        val remoteCode = info.optInt("versionCode", 0)
+        val remoteName = info.optString("versionName", "новая")
+
+        if (remoteCode <= installedCode) {
+            return UpdateStatus(
+                installedCode, installedName, remoteCode, remoteName, Outcome.UP_TO_DATE,
+                "Установлена последняя версия",
+            )
+        }
+
+        val url = info.optString("url", "$BASE_URL/download/una.apk")
+        val expected = info.optString("sha256", "").lowercase()
+        // filesDir, not cacheDir: a 57 MB APK is easily evicted from the cache before it is installed
+        val file = File(File(context.filesDir, "updates"), "una-update.apk")
+        file.parentFile?.mkdirs()
+        file.delete()
+
+        download(url, file)?.let { reason ->
+            return error("Не удалось скачать: $reason", remoteCode, remoteName)
+        }
+        if (expected.isNotEmpty() && sha256(file) != expected) {
+            val size = file.length() / 1024 / 1024
+            file.delete()
+            return error("Контрольная сумма не совпала (скачано $size МБ)", remoteCode, remoteName)
+        }
+
+        notify(
+            context,
+            "Обновление $remoteName готово",
+            "Нажмите, чтобы установить",
+            installPendingIntent(context, file),
+        )
+        return UpdateStatus(
+            installedCode, installedName, remoteCode, remoteName, Outcome.READY_TO_INSTALL,
+            "Скачано ${file.length() / 1024 / 1024} МБ, можно устанавливать",
+            file,
+        )
+    }
+
+    /** Opens the system installer for an already downloaded APK. Needs a foreground activity. */
+    fun installNow(context: Context, file: File): Boolean = try {
+        if (!file.exists()) {
+            false
+        } else {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(
+                        FileProvider.getUriForFile(
+                            context, "${context.packageName}.files", file,
+                        ),
+                        "application/vnd.android.package-archive",
+                    )
+                    addFlags(
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_ACTIVITY_NEW_TASK
+                    )
+                }
+            )
+            true
+        }
+    } catch (t: Throwable) {
+        Log.w(TAG, "cannot start the installer", t)
+        false
+    }
+
+    fun notificationsEnabled(context: Context): Boolean =
+        androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
 
     private fun fetchVersion(): JSONObject? = try {
         val connection = (URL("$BASE_URL/version").openConnection() as HttpURLConnection).apply {
             connectTimeout = 10000
             readTimeout = 15000
         }
-        if (connection.responseCode !in 200..299) {
+        val code = connection.responseCode
+        if (code !in 200..299) {
+            Log.w(TAG, "version endpoint HTTP $code")
             null
         } else {
             val body = connection.inputStream.bufferedReader().use { it.readText() }
@@ -80,25 +159,31 @@ object Updater {
         null
     }
 
-    private fun download(url: String, target: File): Boolean = try {
+    /** @return null on success, or a short human-readable reason for the failure. */
+    private fun download(url: String, target: File): String? = try {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15000
             readTimeout = 60000
             instanceFollowRedirects = true
         }
-        if (connection.responseCode !in 200..299) {
-            Log.w(TAG, "APK download HTTP ${connection.responseCode}")
-            false
+        val code = connection.responseCode
+        if (code !in 200..299) {
+            Log.w(TAG, "APK download HTTP $code")
+            "сервер ответил $code"
         } else {
             connection.inputStream.use { input ->
                 target.outputStream().use { output -> input.copyTo(output, 256 * 1024) }
             }
             connection.disconnect()
-            true
+            if (target.length() < 1024 * 1024) {
+                "получено всего ${target.length()} байт"
+            } else {
+                null
+            }
         }
     } catch (t: Throwable) {
         Log.w(TAG, "APK download failed", t)
-        false
+        "${t.javaClass.simpleName}: ${t.message ?: "нет подробностей"}"
     }
 
     private fun sha256(file: File): String {
@@ -114,7 +199,8 @@ object Updater {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private fun isOnWifi(context: Context): Boolean {
+    /** Kept for diagnostics: whether the phone is on Wi-Fi right now. */
+    fun isOnWifi(context: Context): Boolean {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return false
         val network = manager.activeNetwork ?: return false
@@ -123,7 +209,7 @@ object Updater {
             caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
     }
 
-    private fun installIntent(context: Context, file: File): PendingIntent {
+    private fun installPendingIntent(context: Context, file: File): PendingIntent {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
@@ -141,7 +227,9 @@ object Updater {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Обновления", NotificationManager.IMPORTANCE_DEFAULT)
+                NotificationChannel(
+                    CHANNEL_ID, "Обновления", NotificationManager.IMPORTANCE_HIGH,
+                )
             )
         }
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -149,6 +237,7 @@ object Updater {
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
         if (action != null) {
             builder.setContentIntent(action)
