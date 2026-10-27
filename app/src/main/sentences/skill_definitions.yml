@@ -1,0 +1,136 @@
+skills:
+  - id: current_time
+    specificity: high
+    sentences:
+      - id: query
+
+  - id: calculator
+    specificity: medium
+    sentences:
+      - id: calculate
+        captures:
+          - id: calculation
+            type: string
+  - id: calculator_operators
+    specificity: low
+    sentences:
+      - id: addition
+      - id: subtraction
+      - id: multiplication
+      - id: division
+      - id: power
+      - id: square_root
+
+  - id: lyrics
+    specificity: high
+    sentences:
+      - id: query
+        captures:
+          - id: song
+            type: string
+
+  - id: navigation
+    specificity: high
+    sentences:
+      - id: query
+        captures:
+          - id: where
+            type: string
+
+  - id: media
+    specificity: high
+    sentences:
+      - id: play
+      - id: pause
+      - id: previous
+      - id: next
+
+  - id: joke
+    specificity: high
+    sentences:
+      - id: command
+
+  - id: open
+    specificity: medium
+    sentences:
+      - id: query
+        captures:
+          - id: what
+            type: string
+
+  - id: listening
+    specificity: high
+    sentences:
+      - id: stop
+      - id: start
+
+  - id: notify
+    specificity: high
+    sentences:
+      - id: notifications
+
+  - id: flashlight
+    specificity: high
+    sentences:
+      - id: turn_on
+      - id: turn_off
+
+  - id: search
+    specificity: low
+    sentences:
+      - id: query
+        captures:
+          - id: what
+            type: string
+
+  - id: telephone
+    specificity: low
+    sentences:
+      - id: dial
+        captures:
+          - id: who
+            type: string
+
+  - id: timer
+    specificity: high
+    sentences:
+      - id: set
+        captures:
+          - id: duration
+            type: duration
+          - id: name
+            type: string
+      - id: cancel
+        captures:
+          - id: name
+            type: string
+      - id: query
+        captures:
+          - id: name
+            type: string
+
+  - id: util_yes_no
+    specificity: high
+    sentences:
+      - id: yes
+      - id: no
+
+  - id: weather
+    specificity: high
+    sentences:
+      - id: current
+        captures:
+          - id: where
+            type: string
+
+  - id: translation
+    specificity: high
+    sentences:
+      - id: translate
+        captures:
+          - id: query
+            type: string
+          - id: source
+            type: string
+          - id: target
+            type: string

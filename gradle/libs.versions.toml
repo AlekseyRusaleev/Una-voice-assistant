@@ -1,0 +1,114 @@
+[versions]
+accompanist = "0.37.3"
+activityCompose = "1.11.0"
+androidxTest = "1.7.0"
+androidxTestUiAutomator = "2.3.0"
+appcompat = "1.7.1"
+coilCompose = "2.7.0"
+composeBom = "2025.09.01"
+datastore = "1.1.7"
+desugarJdkLibs = "2.1.5"
+# used in settings.gradle.kts for git dependencies
+dicioNumbers = "4140dfd299236270fe92b3690e220943bf801c4f"
+dicioSentencesCompiler = "6d0f1ca0a732c28329b3fd0f7c8f351e00933ad6"
+exp4j = "0.4.8"
+gradle = "8.13.0"
+dagger = "2.57.2"
+hilt = "1.2.0" # cannot update to 1.3.0 as its minSdk is 23
+includegitPlugin = "0.3.1"
+jacksonDataformatYaml = "2.20.0"
+jacksonModuleKotlin = "2.20.0"
+java = "21"
+jgit = "7.3.0.202506031305-r"
+jna = "5.18.1"
+jsoup = "1.21.2"
+kotest = "6.0.3"
+kotlin = "2.2.20"
+kotlinpoet = "2.2.0"
+kotlinSerialization = "1.9.0"
+ksp = "2.2.20-2.0.3"
+navigation = "2.9.5"
+okhttp = "5.2.0"
+protobufPlugin = "0.9.5"
+protoc = "4.32.1"
+unbescape = "1.1.6.RELEASE"
+# used by the UnicodeCldrLanguagesTask plugin as the git commit of the
+# https://github.com/unicode-org/cldr repo to use as a source of data
+unicodeCldrGitCommit = "41283df11cce01751c29c400a8f94d1d8687210d"
+voskAndroid = "0.3.70"
+litert = "1.4.1" # cannot update to 2.0.0 as its minSdk is 23
+permissionFlow = "2.1.0"
+minSdk = "21"
+targetSdk = "36"
+compileSdk = "36"
+
+[libraries]
+accompanist-drawablepainter = { module = "com.google.accompanist:accompanist-drawablepainter", version.ref = "accompanist" }
+activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+android-tools-build-gradle = { module = "com.android.tools.build:gradle", version.ref = "gradle" }
+appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coilCompose" }
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
+compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+compose-material3 = { module = "androidx.compose.material3:material3" }
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+datastore = { module = "androidx.datastore:datastore", version.ref = "datastore" }
+debug-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+debug-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+desugar_jdk_libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+# update versions for dicio-* libraries under [versions] (they are included via git)
+dicio-numbers = { module = "git.included.build:dicio-numbers" }
+dicio-sentences-compiler = { module = "git.included.build:dicio-sentences-compiler" }
+# these are the two local plugins
+dicio-sentences-compiler-plugin = { module = "org.stypox.dicio.sentencesCompilerPlugin:sentences-compiler-plugin" }
+dicio-unicode-cldr-plugin = { module = "org.stypox.dicio.unicodeCldrPlugin:unicode-cldr-plugin" }
+exp4j = { module = "net.objecthunter:exp4j", version.ref = "exp4j" }
+hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "dagger" }
+hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "dagger" }
+hilt-android-testing = { module = "com.google.dagger:hilt-android-testing", version.ref = "dagger" }
+hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hilt" }
+jackson-dataformat-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml", version.ref = "jacksonDataformatYaml" }
+jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jacksonModuleKotlin" }
+jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+kotest-property = { module = "io.kotest:kotest-property", version.ref = "kotest" }
+kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
+kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+kotlin-serialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinSerialization" }
+kotlinpoet = { module = "com.squareup:kotlinpoet", version.ref = "kotlinpoet" }
+navigation = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
+okhttp = { module = "com.squareup.okhttp3:okhttp" }
+okhttp-bom = { module = "com.squareup.okhttp3:okhttp-bom", version.ref = "okhttp" }
+protobuf-java-lite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protoc" }
+protobuf-kotlin-lite = { module = "com.google.protobuf:protobuf-kotlin-lite", version.ref = "protoc" }
+protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protoc" }
+test-android-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+test-core = { module = "androidx.test:core", version.ref = "androidxTest" }
+test-rules = { module = "androidx.test:rules", version.ref = "androidxTest" }
+test-runner = { module = "androidx.test:runner", version.ref = "androidxTest" }
+test-ui-automator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "androidxTestUiAutomator" }
+unbescape = { module = "org.unbescape:unbescape", version.ref = "unbescape" }
+vosk-android = { module = "com.alphacephei:vosk-android", version.ref = "voskAndroid" }
+litert = { module = "com.google.ai.edge.litert:litert", version.ref = "litert" }
+permission-flow-android = { module = "dev.shreyaspatil.permission-flow:permission-flow-android", version.ref = "permissionFlow" }
+permission-flow-compose = { module = "dev.shreyaspatil.permission-flow:permission-flow-compose", version.ref = "permissionFlow" }
+
+[plugins]
+com-android-application = { id = "com.android.application", version.ref = "gradle" }
+com-android-library = { id = "com.android.library", version.ref = "gradle" }
+org-jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+org-jetbrains-kotlin-plugin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+org-jetbrains-kotlin-plugin-parcelize = { id = "org.jetbrains.kotlin.plugin.parcelize", version.ref = "kotlin" }
+org-jetbrains-kotlin-plugin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+com-google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+com-google-dagger-hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "dagger" }
+com-google-protobuf = { id = "com.google.protobuf", version.ref = "protobufPlugin" }
+me-champeau-includegit = { id = "me.champeau.includegit", version.ref = "includegitPlugin" }
+
+# these are a local plugins, so "version" here is completely useless
+dicio-sentences-compiler-plugin = { id = "org.stypox.dicio.sentencesCompilerPlugin", version = "1.0" }
+dicio-unicode-cldr-plugin = { id = "org.stypox.dicio.unicodeCldrPlugin", version = "1.0" }
