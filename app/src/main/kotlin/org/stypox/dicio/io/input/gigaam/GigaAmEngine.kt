@@ -4,12 +4,8 @@ import android.content.Context
 import android.util.Log
 
 /**
- * A single shared GigaAM recognizer for the whole app.
- *
- * The model takes a few hundred megabytes of RAM once loaded, so two instances (the wake service and
- * the button inside the app) would double that and risk an out-of-memory kill. Every call is
- * serialised: recognition is short (a second or two), so waiting is cheaper than duplicating the
- * model.
+ * One shared GigaAM recognizer for the whole app: the model takes hundreds of megabytes in RAM, so a
+ * second instance would risk an out-of-memory kill. Calls are serialised.
  */
 object GigaAmEngine {
     private const val TAG = "GigaAmEngine"

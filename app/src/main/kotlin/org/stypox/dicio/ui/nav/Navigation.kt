@@ -109,12 +109,8 @@ fun Navigation() {
 }
 
 /**
- * On the very first launch this shows the system permission dialogs right away, instead of just
- * opening a screen the user may never find: without the microphone the assistant is dead, and the
- * other grants (contacts, phone, SMS, calendar, camera) are needed for specific commands.
- *
- * Whatever the user denies stays visible on the permissions screen, which is opened afterwards so
- * that the special access ("notification access", battery, installing updates) is explained too.
+ * Shows the system permission dialogs on the first launch and then opens the permissions screen
+ * with whatever is still missing (special access cannot be granted by a dialog).
  */
 @Composable
 private fun askForPermissionsOnFirstRun(
@@ -167,11 +163,7 @@ private fun firstRunRuntimePermissions(): List<String> {
     return permissions
 }
 
-/**
- * Explains, once, that the recognition journal is sent to the server automatically from the first
- * launch, and gives a one-tap way to refuse. Silence-by-default telemetry is not acceptable even
- * when it is on by default, so the notice cannot be skipped by accident.
- */
+/** Tells the user once that the journal is uploaded by default, with a way to refuse. */
 @Composable
 private fun showUplinkNoticeOnFirstRun(context: android.content.Context, enabled: Boolean) {
     val prefs = context.getSharedPreferences("una_first_run", android.content.Context.MODE_PRIVATE)
@@ -193,10 +185,9 @@ private fun showUplinkNoticeOnFirstRun(context: android.content.Context, enabled
         title = { Text("Журнал уходит на сервер") },
         text = {
             Text(
-                "Чтобы Una лучше слышала имя, приложение автоматически отправляет на наш сервер " +
-                    "услышанные фразы и до 20 коротких аудиофрагментов в день. Заметки, СМС и " +
-                    "календарь не отправляются никогда. Отключить можно в любой момент в " +
-                    "«Что я услышала».\n\nЭто можно выключить прямо сейчас."
+                "Чтобы Una лучше слышала имя, приложение отправляет на сервер услышанные фразы " +
+                    "и короткие аудиофрагменты (до 20 в день). Заметки, СМС и календарь не " +
+                    "отправляются. Выключить можно в «Что я услышала»."
             )
         },
         confirmButton = {

@@ -13,13 +13,8 @@ import java.util.Locale
 import kotlin.concurrent.thread
 
 /**
- * Sends the recognition journal and short audio clips of rejected wake words to our backend.
- *
- * Both are **on by default**, so a fresh install starts collecting data for improving the wake word
- * without any setup; the first run explains this and offers a single button to turn it off. After
- * that it can be switched off in the journal screen at any time. Only data from this device is
- * sent; audio is limited to a few clips per day so that the phone does not spend traffic or
- * battery uploading constantly.
+ * Uploads the recognition journal and short wake word clips. Enabled by default, can be turned off
+ * in the journal screen; clips are limited per day to keep traffic and battery use low.
  */
 object Uplink {
     private const val TAG = "Uplink"
@@ -34,7 +29,7 @@ object Uplink {
 
     private const val MAX_AUDIO_PER_DAY = 20
 
-    /** Real wake-ups are the valuable training data, but they are also capped separately. */
+    /** Confirmed wake-ups are capped separately from rejected triggers. */
     private const val MAX_POSITIVE_PER_DAY = 8
     private const val SAMPLE_RATE = 16000
 
@@ -93,9 +88,8 @@ object Uplink {
     }
 
     /**
-     * Uploads a short WAV clip: [reason] is either `rejected` (a false trigger the strict check
-     * threw away) or `positive` (a confirmed wake-up). Both are needed to train a wake word model —
-     * with only false triggers the model would learn what the name is *not*.
+     * Uploads a short WAV clip. `reason` is `rejected` (false trigger) or `positive` (confirmed
+     * wake-up); a wake word model needs both.
      */
     fun sendAudio(context: Context, pcm: ShortArray, reason: String) {
         if (!isEnabled(context) || pcm.isEmpty()) {
@@ -125,7 +119,7 @@ object Uplink {
     private fun dailyCap(reason: String): Int =
         if (reason == "positive") MAX_POSITIVE_PER_DAY else MAX_AUDIO_PER_DAY
 
-    /** Each reason has its own daily counter, so positives cannot eat the negatives' quota. */
+    /** Each reason has its own daily counter. */
     private fun allowedAudioToday(context: Context, reason: String): Boolean {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val prefs = prefs(context)

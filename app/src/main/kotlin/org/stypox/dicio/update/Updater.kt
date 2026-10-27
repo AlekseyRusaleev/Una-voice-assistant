@@ -21,11 +21,8 @@ import java.security.MessageDigest
 import kotlin.concurrent.thread
 
 /**
- * Self-update: asks the backend for the newest version, downloads the APK and offers to install it.
- * Android always asks the user to confirm the installation — that cannot be skipped.
- *
- * Everything that happens here is reported as an [UpdateStatus] instead of being written to logcat
- * only: when an update silently "does not arrive", the reason must be visible in the app.
+ * Self-update: fetches the newest version, downloads the APK and offers to install it (Android
+ * always asks for confirmation). Failures come back as an [UpdateStatus] so the UI can show them.
  */
 object Updater {
     private const val TAG = "Updater"
@@ -61,11 +58,7 @@ object Updater {
     }
 
     /**
-     * Full synchronous check: fetches the version, downloads the APK if it is newer and posts the
-     * install notification. Blocking — call it from a background dispatcher.
-     *
-     * @param onStage reports what is happening right now, so that the UI can show progress instead
-     * of a silent pause: a 57 MB download takes a while on mobile data.
+     * Blocking: call from a background dispatcher. `onStage` reports progress for the UI.
      */
     fun checkNow(context: Context, onStage: (String) -> Unit = {}): UpdateStatus {
         val installedCode = BuildConfig.VERSION_CODE
@@ -88,7 +81,7 @@ object Updater {
 
         val url = info.optString("url", "$BASE_URL/download/una.apk")
         val expected = info.optString("sha256", "").lowercase()
-        // filesDir, not cacheDir: a 57 MB APK is easily evicted from the cache before it is installed
+        // filesDir, not cacheDir: a 57 MB APK may be evicted from the cache
         val file = File(File(context.filesDir, "updates"), "una-update.apk")
         file.parentFile?.mkdirs()
         file.delete()

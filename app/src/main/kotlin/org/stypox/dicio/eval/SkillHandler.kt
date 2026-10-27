@@ -98,12 +98,7 @@ class SkillHandler @Inject constructor(
     }
 
     companion object {
-        /**
-         * Skills inherited from Dicio that do not work in a Russian-only Una:
-         * [joke], [translation] and [notify] have no Russian grammar, so they never match, and
-         * [weather] relied on the upstream author's shared OpenWeatherMap key, which Una must not
-         * use. They stay in the list so they can be switched on deliberately, but off by default.
-         */
+        /** Skills inherited from Dicio that have no Russian grammar or no usable API key. */
         private val DISABLED_BY_DEFAULT = setOf("joke", "translation", "notify", "weather")
 
         fun newForPreviews(context: Context): SkillHandler {

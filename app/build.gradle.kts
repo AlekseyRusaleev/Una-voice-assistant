@@ -33,8 +33,8 @@ android {
         applicationId = "ai.una.assistant"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 33
-        versionName = "2.13.0-una"
+        versionCode = 34
+        versionName = "2.14.0-una"
         testInstrumentationRunner = "org.stypox.dicio.CustomTestRunner"
 
         vectorDrawables.useSupportLibrary = true
@@ -181,8 +181,6 @@ dependencies {
     implementation(libs.jna) { artifact { type = "aar" } }
     implementation(libs.vosk.android)
 
-    // LiteRT / Tensorflow Lite
-    implementation(libs.litert)
 
     // OkHttp
     implementation(platform(libs.okhttp.bom))

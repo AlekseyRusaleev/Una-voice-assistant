@@ -22,15 +22,12 @@ package org.stypox.dicio.io.input
 import org.stypox.dicio.ui.util.Progress
 
 /**
- * This is almost symmetrical to [org.stypox.dicio.io.input.vosk.VoskState], except that there are
- * no implementation-defined fields. For this reason, if in the future another STT engine will be
- * used, this class and the whole UI layer could be kept the same.
+ * State of a speech input device, without any engine-specific fields, so that the UI layer does not
+ * depend on which recogniser is behind it.
  */
 sealed interface SttState {
     /**
-     * Does not have a counterpart in [org.stypox.dicio.io.input.vosk.VoskState] and should never be
-     * generated directly by a [org.stypox.dicio.io.input.SttInputDevice]. In fact, this is used
-     * directly in the UI layer, since permission checks can only be done there.
+     * Never produced by a [SttInputDevice]: the UI sets it after a failed permission check.
      */
     data object NoMicrophonePermission : SttState
 

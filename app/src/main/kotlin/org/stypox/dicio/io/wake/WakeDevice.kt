@@ -37,9 +37,4 @@ interface WakeDevice {
      * [org.stypox.dicio.di.WakeDeviceWrapper.reinitializeToReleaseResources].
      */
     fun isOccupyingResources(): Boolean
-
-    /**
-     * Returns `true` if the wake word is "Hey Dicio", `false` if a custom model is being used
-     */
-    fun isHeyDicio(): Boolean
 }

@@ -3,26 +3,11 @@ syntax = "proto3";
 option java_package = "org.stypox.dicio.settings.datastore";
 option java_multiple_files = true;
 
-// keep this list ordered alphabetically, even if this implies
-// not having it ordered by enum value
-// Warning
-// If you change existing values, current users will encounter
-// a sudden change of selected language. Please avoid that.
+// Una speaks Russian only. Values used by Dicio are reserved so that a settings file written by an
+// older build still parses: an unknown value simply becomes LANGUAGE_SYSTEM.
 enum Language {
+  reserved 1 to 8, 10 to 15;
+
   LANGUAGE_SYSTEM = 0;
-  LANGUAGE_CS = 1; // Czech
-  LANGUAGE_DE = 2; // German
-  LANGUAGE_EN = 3; // English
-  LANGUAGE_EN_IN = 4; // Indian English
-  LANGUAGE_ES = 5; // Spanish
-  LANGUAGE_EL = 6; // Greek
-  LANGUAGE_FR = 7; // French
-  LANGUAGE_IT = 8; // Italian
-  LANGUAGE_NL = 14; // Nederlands
-  LANGUAGE_PL = 12; // Polish
   LANGUAGE_RU = 9; // Russian
-  LANGUAGE_SL = 10; // Slovene
-  LANGUAGE_SV = 13; // Swedish
-  LANGUAGE_UK = 11; // Ukrainian
-  LANGUAGE_TR = 15; // Turkey
 }

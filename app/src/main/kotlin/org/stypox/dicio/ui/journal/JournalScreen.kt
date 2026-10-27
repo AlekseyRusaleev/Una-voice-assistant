@@ -347,8 +347,7 @@ private fun UpdateCard(onResult: (String) -> Unit) {
                             stage = ""
                             status = result
                             busy = false
-                            // a small grey line was too easy to miss, so the result is shown
-                            // in a dialog the user has to acknowledge
+                            // the result must be acknowledged, a small text line is easy to miss
                             dialog = result
                             onResult("Обновление: ${result.message}")
                         }

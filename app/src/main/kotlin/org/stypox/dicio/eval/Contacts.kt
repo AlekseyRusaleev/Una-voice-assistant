@@ -8,9 +8,8 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 
 /**
- * Contact lookup shared by the calling, SMS and calendar commands: every contact is scored against
- * the spoken name, comparing word stems so that Russian case endings do not matter
- * ("маме" → "мама", "юле" → "юлия"). On a tie the shorter name wins ("Юлия" over "Юлия ЦПСС").
+ * Contact lookup for the calling and SMS commands. Names are compared by word stems, so Russian
+ * case endings do not matter ("маме" → "мама").
  */
 object Contacts {
     private const val TAG = "Contacts"

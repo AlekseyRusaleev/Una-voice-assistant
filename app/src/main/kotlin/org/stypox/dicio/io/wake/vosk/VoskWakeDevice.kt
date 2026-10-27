@@ -25,13 +25,9 @@ import org.vosk.Recognizer
 import java.io.File
 
 /**
- * Wake word device based on Vosk with a restricted decoding grammar.
- *
- * Unlike [org.stypox.dicio.io.wake.oww.OpenWakeWordDevice], which requires a separately trained
- * `.tflite` model for every keyword, this reuses the Russian Vosk model and simply limits the
- * decoder to the wake word plus a small command vocabulary. That makes one-shot phrases such as
- * "Юна, следующий трек" possible: the whole utterance is decoded, the wake word is stripped, and
- * the rest is handed to the skill evaluator as the command.
+ * Wake word detection based on Vosk with a restricted decoding grammar: the decoder only knows the
+ * name plus the words our commands are made of, so a one-shot phrase like "Юна, следующий трек" is
+ * decoded whole, the name is stripped and the rest becomes the command.
  */
 class VoskWakeDevice(
     @param:ApplicationContext private val appContext: Context,
@@ -175,8 +171,7 @@ class VoskWakeDevice(
                     return "" to false
                 }
                 if (confidence < MIN_WAKE_CONFIDENCE) {
-                    // the name was heard but the detector is unsure: worth counting, so that
-                    // tuning is driven by numbers and not by "it feels like it misses a lot"
+                    // the name was heard but not confidently: count it for tuning
                     WakeStats.onNearMiss(appContext)
                     Log.d(TAG, "near miss: $word at $confidence")
                     return "" to false
@@ -211,9 +206,6 @@ class VoskWakeDevice(
         scope.cancel()
     }
 
-    /** Always [false]: the built-in "Hey Dicio" model is not used here. */
-    override fun isHeyDicio(): Boolean = false
-
     companion object {
         private const val TAG = "VoskWakeDevice"
         private const val SAMPLE_RATE = 16000.0f
@@ -221,11 +213,8 @@ class VoskWakeDevice(
         /** 80 ms of audio at 16 kHz, the same frame size the OpenWakeWord device uses. */
         private const val FRAME_SIZE = 1280
 
-        /**
-         * Every spelling of the name the decoder is allowed to produce. Short Russian names get
-         * clipped easily ("юна" → "уна", "юнна"), so all plausible variants are triggers: it is
-         * far better to catch a variant and let the strict check confirm it than to miss the name.
-         */
+        /** Accepted spellings of the name: short words get clipped, and false positives are
+         *  filtered later by the strict check. */
         private val WAKE_WORDS = setOf("юна", "юнна", "уна", "юнона")
 
         /**
@@ -234,13 +223,7 @@ class VoskWakeDevice(
          */
         private val PREFIX_WORDS = setOf("слушай", "слушайте", "эй", "привет", "окей", "ок", "алло")
 
-        /**
-         * How sure Vosk must be about the wake word itself.
-         *
-         * This used to be 0.85, which silently lost clipped or quiet "юна" — the strict GigaAM
-         * re-check is the real arbiter anyway, so a lenient value here trades a few extra
-         * verifications for a lot fewer dead wake-ups.
-         */
+        /** Confidence Vosk needs for the name itself; the GigaAM re-check is the real filter. */
         private const val MIN_WAKE_CONFIDENCE = 0.72
 
         /**

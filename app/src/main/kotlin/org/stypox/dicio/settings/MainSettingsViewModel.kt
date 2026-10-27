@@ -1,16 +1,12 @@
 package org.stypox.dicio.settings
 
 import android.app.Application
-import android.net.Uri
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.stypox.dicio.di.WakeDeviceWrapper
-import org.stypox.dicio.io.wake.oww.OpenWakeWordDevice
 import org.stypox.dicio.settings.datastore.InputDevice
 import org.stypox.dicio.settings.datastore.Language
 import org.stypox.dicio.settings.datastore.SpeechOutputDevice
@@ -38,22 +34,6 @@ class MainSettingsViewModel @Inject constructor(
                     .apply(transform)
                     .build()
             }
-        }
-    }
-
-    val isHeyDicio: StateFlow<Boolean> = wakeDeviceWrapper?.isHeyDicio ?: MutableStateFlow(true)
-
-    fun addOwwUserWakeFile(uri: Uri) {
-        viewModelScope.launch {
-            OpenWakeWordDevice.addUserWakeFile(getApplication(), uri)
-            wakeDeviceWrapper?.reinitialize()
-        }
-    }
-
-    fun removeOwwUserWakeFile() {
-        viewModelScope.launch {
-            OpenWakeWordDevice.removeUserWakeFile(getApplication())
-            wakeDeviceWrapper?.reinitialize()
         }
     }
 

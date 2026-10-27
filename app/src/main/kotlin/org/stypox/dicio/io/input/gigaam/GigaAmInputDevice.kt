@@ -24,12 +24,7 @@ import org.stypox.dicio.io.input.SttState
 import kotlin.math.sqrt
 
 /**
- * Speech input for the microphone button inside the app, backed by the same GigaAM model the wake
- * service uses.
- *
- * Dicio used to plug Vosk in here, which meant the assistant had two different ears: the wake word
- * path heard GigaAM, while the button heard a small Vosk model. Now both go through
- * [GigaAmEngine], so a phrase is recognised the same way however it was started.
+ * Microphone button input, backed by the same [GigaAmEngine] the wake service uses.
  */
 class GigaAmInputDevice(
     @ApplicationContext private val appContext: Context,

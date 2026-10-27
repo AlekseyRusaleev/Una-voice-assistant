@@ -35,11 +35,6 @@ interface WakeDeviceWrapper {
     val state: StateFlow<WakeState?>
 
     /**
-     * @see [WakeDevice.isHeyDicio]
-     */
-    val isHeyDicio: StateFlow<Boolean>
-
-    /**
      * @see [WakeDevice.download]
      */
     fun download()
@@ -88,8 +83,6 @@ class WakeDeviceWrapperImpl(
     // null means that the user has not enabled any STT input device
     private val _state: MutableStateFlow<WakeState?> = MutableStateFlow(null)
     override val state: StateFlow<WakeState?> = _state
-    private val _isHeyDicio: MutableStateFlow<Boolean>
-    override val isHeyDicio: StateFlow<Boolean>
     private val currentDevice: MutableStateFlow<WakeDevice?>
 
     init {
@@ -102,12 +95,9 @@ class WakeDeviceWrapperImpl(
         currentSetting = firstWakeDeviceSetting
         val firstWakeDevice = buildInputDevice(firstWakeDeviceSetting)
         currentDevice = MutableStateFlow(firstWakeDevice)
-        _isHeyDicio = MutableStateFlow(firstWakeDevice?.isHeyDicio() ?: true)
-        isHeyDicio = _isHeyDicio
 
         scope.launch {
             currentDevice.collectLatest { newWakeDevice ->
-                _isHeyDicio.emit(newWakeDevice?.isHeyDicio() ?: true)
                 if (newWakeDevice == null) {
                     _state.emit(null)
                 } else {
