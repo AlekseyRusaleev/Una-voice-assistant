@@ -1,6 +1,9 @@
 ﻿package org.stypox.dicio.ui.nav
 
 import android.content.Intent
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -54,8 +57,13 @@ fun Navigation() {
     NavHost(navController = navController, startDestination = Home) {
         composable<Home> {
             val context = LocalContext.current
-            showUplinkNoticeOnFirstRun(context)
-            askPermissionsOnFirstRun(context) { navController.navigate(Permissions) }
+            // the uplink notice waits for the permission dialogs, so the two never overlap
+            var permissionsSettled by remember { mutableStateOf(false) }
+            askForPermissionsOnFirstRun(
+                context = context,
+                onSettled = { permissionsSettled = true },
+            ) { navController.navigate(Permissions) }
+            showUplinkNoticeOnFirstRun(context, permissionsSettled)
             ScreenWithDrawer(
                 onSettingsClick = { navController.navigate(MainSettings) },
                 onAboutClick = { navController.navigate(About) },
@@ -100,18 +108,63 @@ fun Navigation() {
     }
 }
 
-/** Opens the permissions screen once, when the microphone is missing (fresh install). */
+/**
+ * On the very first launch this shows the system permission dialogs right away, instead of just
+ * opening a screen the user may never find: without the microphone the assistant is dead, and the
+ * other grants (contacts, phone, SMS, calendar, camera) are needed for specific commands.
+ *
+ * Whatever the user denies stays visible on the permissions screen, which is opened afterwards so
+ * that the special access ("notification access", battery, installing updates) is explained too.
+ */
 @Composable
-private fun askPermissionsOnFirstRun(context: android.content.Context, open: () -> Unit) {
+private fun askForPermissionsOnFirstRun(
+    context: android.content.Context,
+    onSettled: () -> Unit,
+    openScreen: () -> Unit,
+) {
     val prefs = context.getSharedPreferences("una_first_run", android.content.Context.MODE_PRIVATE)
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        onSettled()
+        // show the checklist with what is still missing (special access cannot be granted here)
+        openScreen()
+    }
+
     LaunchedEffect(Unit) {
-        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!granted && !prefs.getBoolean("asked", false)) {
-            prefs.edit().putBoolean("asked", true).apply()
-            open()
+        if (prefs.getBoolean("permissions_requested", false)) {
+            onSettled()
+            return@LaunchedEffect
+        }
+        prefs.edit().putBoolean("permissions_requested", true).apply()
+
+        val missing = firstRunRuntimePermissions().filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) {
+            onSettled()
+            openScreen()
+        } else {
+            launcher.launch(missing.toTypedArray())
         }
     }
+}
+
+/** Runtime permissions Una can ask for; microphone first, because nothing works without it. */
+private fun firstRunRuntimePermissions(): List<String> {
+    val permissions = mutableListOf(
+        Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.READ_CONTACTS,
+        Manifest.permission.CALL_PHONE,
+        Manifest.permission.SEND_SMS,
+        Manifest.permission.READ_CALENDAR,
+        Manifest.permission.WRITE_CALENDAR,
+        Manifest.permission.CAMERA,
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        permissions.add(1, Manifest.permission.POST_NOTIFICATIONS)
+    }
+    return permissions
 }
 
 /**
@@ -120,12 +173,12 @@ private fun askPermissionsOnFirstRun(context: android.content.Context, open: () 
  * when it is on by default, so the notice cannot be skipped by accident.
  */
 @Composable
-private fun showUplinkNoticeOnFirstRun(context: android.content.Context) {
+private fun showUplinkNoticeOnFirstRun(context: android.content.Context, enabled: Boolean) {
     val prefs = context.getSharedPreferences("una_first_run", android.content.Context.MODE_PRIVATE)
     var visible by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        if (!prefs.getBoolean("uplink_notice", false)) {
+    LaunchedEffect(enabled) {
+        if (enabled && !prefs.getBoolean("uplink_notice", false)) {
             prefs.edit().putBoolean("uplink_notice", true).apply()
             visible = true
         }
