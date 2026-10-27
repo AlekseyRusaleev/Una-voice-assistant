@@ -10,9 +10,14 @@ The user can easily delete all of his personal data by just clearing the app's s
 
 ## Una-specific additions
 
+- **The recognition journal is sent to Una's server by default.** A fresh install uploads the phrases
+  the assistant heard and short audio clips (up to 8 confirmed wake-ups and 20 rejected triggers per
+  day) so that the wake word model can be improved. The first run explains this and offers a
+  "Не отправлять" button; the switch in "Что я услышала" turns it off at any time, and the app keeps
+  working fully offline. Notes, SMS and calendar entries are never uploaded through this channel.
 - **Notes** are stored only on the device. They can be exported to a folder the user picks (for
   example an Obsidian vault); nothing is uploaded unless the user explicitly enables the "for
-  advanced users" upload card and confirms the consent dialog.
+  advanced users" upload card and confirms the dialog.
 - **SMS** are sent through the phone's own `SmsManager` when the user grants `SEND_SMS`. The text is
   never sent to Una's server and is not stored by the app; only a local notification confirms it.
 - **Calendar** events are written to the calendar chosen on the device when `READ_CALENDAR` and

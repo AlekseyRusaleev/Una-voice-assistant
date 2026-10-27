@@ -1,4 +1,4 @@
-﻿package org.stypox.dicio.io.wake
+package org.stypox.dicio.io.wake
 
 import android.Manifest.permission.RECORD_AUDIO
 import android.annotation.SuppressLint
@@ -224,10 +224,12 @@ class WakeService : Service() {
 
                 lastHeard.set(Instant.now())
 
-                // the service outlives the activity, so updates must be checked here as well
+                // the service outlives the activity, so updates and the journal uplink must run
+                // here as well: otherwise a phone that is never unlocked sends nothing
                 if (System.currentTimeMillis() - lastUpdateCheck > UPDATE_CHECK_INTERVAL_MILLIS) {
                     lastUpdateCheck = System.currentTimeMillis()
                     org.stypox.dicio.update.Updater.checkAndUpdate(this)
+                    org.stypox.dicio.eval.Uplink.sendJournal(this)
                 }
             }
         } finally {
@@ -361,6 +363,12 @@ class WakeService : Service() {
             Uplink.sendAudio(this, tailAudio(), "rejected")
             Log.d(TAG, "strict check rejected the trigger")
             return
+        }
+
+        // a confirmed wake-up is the positive example a wake word model needs to be trained on;
+        // only sent when the strict check actually confirmed the name
+        if (WakeStats.isStrict(this)) {
+            Uplink.sendAudio(this, tailAudio(), "positive")
         }
 
         val intent = Intent(this, MainActivity::class.java)

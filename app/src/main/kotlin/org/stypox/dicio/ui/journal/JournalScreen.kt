@@ -398,9 +398,10 @@ private fun StatsCard(
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Отправлять на сервер", style = MaterialTheme.typography.bodyMedium)
+                    Text("Отправлять журнал на сервер", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "Журнал и короткие записи ложных срабатываний — для обучения модели",
+                        "Включено по умолчанию: услышанные фразы и до 20 коротких аудиофрагментов " +
+                            "в день — чтобы обучить модель лучше слышать «Юна»",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

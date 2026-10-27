@@ -1,4 +1,4 @@
-﻿package org.stypox.dicio.eval
+package org.stypox.dicio.eval
 
 import android.content.Context
 import android.util.Log
@@ -15,7 +15,9 @@ import kotlin.concurrent.thread
 /**
  * Sends the recognition journal and short audio clips of rejected wake words to our backend.
  *
- * Both are opt-in and can be switched off in the journal screen. Only data from this device is
+ * Both are **on by default**, so a fresh install starts collecting data for improving the wake word
+ * without any setup; the first run explains this and offers a single button to turn it off. After
+ * that it can be switched off in the journal screen at any time. Only data from this device is
  * sent; audio is limited to a few clips per day so that the phone does not spend traffic or
  * battery uploading constantly.
  */
@@ -31,14 +33,17 @@ object Uplink {
     private const val KEY_AUDIO_COUNT = "audio_count"
 
     private const val MAX_AUDIO_PER_DAY = 20
+
+    /** Real wake-ups are the valuable training data, but they are also capped separately. */
+    private const val MAX_POSITIVE_PER_DAY = 8
     private const val SAMPLE_RATE = 16000
 
     fun isEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_ENABLED, false) && isConsented(context)
+        prefs(context).getBoolean(KEY_ENABLED, true) && isConsented(context)
 
-    /** The user must explicitly agree to send the journal and audio clips. */
+    /** Kept as a separate flag so the journal screen can still ask before re-enabling. */
     fun isConsented(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_CONSENT, false)
+        prefs(context).getBoolean(KEY_CONSENT, true)
 
     fun setConsented(context: Context, consented: Boolean) {
         prefs(context).edit().putBoolean(KEY_CONSENT, consented).apply()
@@ -87,12 +92,16 @@ object Uplink {
         }
     }
 
-    /** Uploads a short WAV clip of a wake word that the strict check rejected. */
+    /**
+     * Uploads a short WAV clip: [reason] is either `rejected` (a false trigger the strict check
+     * threw away) or `positive` (a confirmed wake-up). Both are needed to train a wake word model —
+     * with only false triggers the model would learn what the name is *not*.
+     */
     fun sendAudio(context: Context, pcm: ShortArray, reason: String) {
         if (!isEnabled(context) || pcm.isEmpty()) {
             return
         }
-        if (!allowedAudioToday(context)) {
+        if (!allowedAudioToday(context, reason)) {
             return
         }
         thread(name = "una-audio") {
@@ -104,8 +113,8 @@ object Uplink {
                 }
                 val wav = toWav(pcm)
                 if (post("/audio?reason=$reason", wav, "audio/wav", token)) {
-                    bumpAudioCounter(context)
-                    Log.d(TAG, "audio clip sent: ${wav.size} bytes")
+                    bumpAudioCounter(context, reason)
+                    Log.d(TAG, "$reason clip sent: ${wav.size} bytes")
                 }
             } catch (t: Throwable) {
                 Log.w(TAG, "audio upload failed", t)
@@ -113,19 +122,26 @@ object Uplink {
         }
     }
 
-    private fun allowedAudioToday(context: Context): Boolean {
+    private fun dailyCap(reason: String): Int =
+        if (reason == "positive") MAX_POSITIVE_PER_DAY else MAX_AUDIO_PER_DAY
+
+    /** Each reason has its own daily counter, so positives cannot eat the negatives' quota. */
+    private fun allowedAudioToday(context: Context, reason: String): Boolean {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val prefs = prefs(context)
-        if (prefs.getString(KEY_AUDIO_DAY, "") != today) {
-            prefs.edit().putString(KEY_AUDIO_DAY, today).putInt(KEY_AUDIO_COUNT, 0).apply()
+        val dayKey = "$KEY_AUDIO_DAY-$reason"
+        val countKey = "$KEY_AUDIO_COUNT-$reason"
+        if (prefs.getString(dayKey, "") != today) {
+            prefs.edit().putString(dayKey, today).putInt(countKey, 0).apply()
             return true
         }
-        return prefs.getInt(KEY_AUDIO_COUNT, 0) < MAX_AUDIO_PER_DAY
+        return prefs.getInt(countKey, 0) < dailyCap(reason)
     }
 
-    private fun bumpAudioCounter(context: Context) {
+    private fun bumpAudioCounter(context: Context, reason: String) {
         val prefs = prefs(context)
-        prefs.edit().putInt(KEY_AUDIO_COUNT, prefs.getInt(KEY_AUDIO_COUNT, 0) + 1).apply()
+        val countKey = "$KEY_AUDIO_COUNT-$reason"
+        prefs.edit().putInt(countKey, prefs.getInt(countKey, 0) + 1).apply()
     }
 
     /** Minimal 16 kHz mono PCM → WAV writer. */
