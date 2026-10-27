@@ -95,7 +95,8 @@ class ErrorActivity : BaseActivity() {
     companion object {
         val TAG: String = ErrorActivity::class.simpleName!!
         const val ERROR_INFO = "error_info"
-        const val ERROR_GITHUB_ISSUE_URL = "https://github.com/Stypox/dicio-android/issues"
+        const val ERROR_GITHUB_ISSUE_URL =
+            "https://github.com/AlekseyRusaleev/Una-voice-assistant/issues"
         val CURRENT_TIMESTAMP_FORMATTER: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 

@@ -85,7 +85,7 @@ class SkillHandler @Inject constructor(
                     // locale is not used here, because the skills directly use the sections locale
 
                     val newEnabledSkillsInfo = allSkillInfoList
-                        .filter { enabledSkills.getOrDefault(it.id, true) }
+                        .filter { enabledSkills.getOrDefault(it.id, it.id !in DISABLED_BY_DEFAULT) }
                         .mapNotNull { info -> info.build(skillContext)?.let { skill -> Pair(info, skill) } }
 
                     _enabledSkillsInfo.value = newEnabledSkillsInfo.map { (info, _skill) -> info }
@@ -98,6 +98,14 @@ class SkillHandler @Inject constructor(
     }
 
     companion object {
+        /**
+         * Skills inherited from Dicio that do not work in a Russian-only Una:
+         * [joke], [translation] and [notify] have no Russian grammar, so they never match, and
+         * [weather] relied on the upstream author's shared OpenWeatherMap key, which Una must not
+         * use. They stay in the list so they can be switched on deliberately, but off by default.
+         */
+        private val DISABLED_BY_DEFAULT = setOf("joke", "translation", "notify", "weather")
+
         fun newForPreviews(context: Context): SkillHandler {
             return SkillHandler(
                 UserSettingsModule.newDataStoreForPreviews(),

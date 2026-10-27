@@ -40,23 +40,11 @@ fun languageSetting() = ListSetting(
     title = stringResource(R.string.pref_language),
     icon = Icons.Default.Language,
     description = stringResource(R.string.pref_language_summary),
+    // Una only speaks Russian: every quick command, the wake word and the model are Russian-only,
+    // so offering other languages here would silently break the assistant.
     possibleValues = listOf(
         ListSetting.Value(Language.LANGUAGE_SYSTEM, stringResource(R.string.pref_language_system)),
-        ListSetting.Value(Language.LANGUAGE_CS, "Čeština"),
-        ListSetting.Value(Language.LANGUAGE_DE, "Deutsch"),
-        ListSetting.Value(Language.LANGUAGE_EN, "English"),
-        ListSetting.Value(Language.LANGUAGE_EN_IN, "English (India)"),
-        ListSetting.Value(Language.LANGUAGE_ES, "Español"),
-        ListSetting.Value(Language.LANGUAGE_EL, "Ελληνικά"),
-        ListSetting.Value(Language.LANGUAGE_FR, "Français"),
-        ListSetting.Value(Language.LANGUAGE_IT, "Italiano"),
-        ListSetting.Value(Language.LANGUAGE_NL, "Nederlands"),
-        ListSetting.Value(Language.LANGUAGE_PL, "Polski"),
         ListSetting.Value(Language.LANGUAGE_RU, "Русский"),
-        ListSetting.Value(Language.LANGUAGE_SL, "Slovenščina"),
-        ListSetting.Value(Language.LANGUAGE_SV, "Svenska"),
-        ListSetting.Value(Language.LANGUAGE_UK, "Українська"),
-        ListSetting.Value(Language.LANGUAGE_TR, "Türkçe"),
     ),
 )
 
@@ -133,10 +121,13 @@ fun wakeDevice() = ListSetting(
     title = stringResource(R.string.pref_wake_method),
     icon = Icons.Default.Hearing,
     description = stringResource(R.string.pref_wake_method_summary),
+    // WAKE_DEVICE_OWW is the historical enum value; the device behind it is the on-device Vosk
+    // wake word detector, so the labels must not mention OpenWakeWord or "Hey Dicio" any more.
     possibleValues = listOf(
         ListSetting.Value(
             value = WakeDevice.WAKE_DEVICE_OWW,
-            name = stringResource(R.string.pref_wake_method_openwakeword),
+            name = stringResource(R.string.pref_wake_method_on),
+            description = stringResource(R.string.pref_wake_method_on_summary),
         ),
         ListSetting.Value(
             value = WakeDevice.WAKE_DEVICE_NOTHING,

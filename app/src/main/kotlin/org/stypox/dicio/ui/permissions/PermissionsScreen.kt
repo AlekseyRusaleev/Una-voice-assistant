@@ -276,6 +276,14 @@ private fun permissionStates(context: Context): List<PermissionState> {
         ) { _, launcher -> launcher.launch(arrayOf(Manifest.permission.CALL_PHONE)) },
 
         PermissionState(
+            title = "Камера",
+            detail = "Фонарик: «Включи фонарик»",
+            granted = granted(Manifest.permission.CAMERA),
+            runtime = true,
+            permission = Manifest.permission.CAMERA,
+        ) { _, launcher -> launcher.launch(arrayOf(Manifest.permission.CAMERA)) },
+
+        PermissionState(
             title = "СМС",
             detail = "«Отправь смс Юле: я задержусь». Без права откроется чат с готовым текстом",
             granted = granted(Manifest.permission.SEND_SMS),

@@ -76,11 +76,12 @@ class LocaleManager @Inject constructor(
                 Sentences.languages
             )
         } catch (e: LocaleUtils.UnsupportedLocaleException) {
-            Log.w(TAG, "Current locale is not supported, defaulting to English", e)
-            // TODO ask the user to manually choose a locale instead of defaulting to english
+            // Una ships Russian grammar only, so anything unsupported falls back to Russian and
+            // not to English (whose grammar is no longer bundled)
+            Log.w(TAG, "Current locale is not supported, defaulting to Russian", e)
             LocaleUtils.LocaleResolutionResult(
-                availableLocale = Locale.ENGLISH,
-                supportedLocaleString = "en",
+                availableLocale = Locale("ru", "RU"),
+                supportedLocaleString = "ru",
             )
         }
     }
@@ -91,11 +92,9 @@ class LocaleManager @Inject constructor(
             Language.UNRECOGNIZED -> {
                 systemLocaleList // the original system locale list from when the app started
             }
-            else -> {
-                // exploit the fact that each `Language` is of the form LANGUAGE or LANGUAGE_COUNTRY
-                LocaleListCompat.create(LocaleUtils.parseLanguageCountry(
-                    language.toString().removePrefix("LANGUAGE_")))
-            }
+            // every other setting is treated as Russian: no other grammar is bundled, so honouring
+            // a leftover value would leave the assistant without any skills
+            else -> LocaleListCompat.create(Locale("ru", "RU"))
         }
     }
 

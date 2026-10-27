@@ -38,7 +38,7 @@ import org.stypox.dicio.eval.Journal
 import org.stypox.dicio.eval.SkillEvaluator
 import org.stypox.dicio.eval.Uplink
 import org.stypox.dicio.io.input.gigaam.GigaAmModel
-import org.stypox.dicio.io.input.gigaam.GigaAmRecognizer
+import org.stypox.dicio.io.input.gigaam.GigaAmEngine
 import org.stypox.dicio.io.input.InputEvent
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
@@ -52,7 +52,6 @@ class WakeService : Service() {
     private val scope = CoroutineScope(Dispatchers.Default + job)
 
     private val listening = AtomicBoolean(false)
-    private var gigaam: GigaAmRecognizer? = null
     private var lastUpdateCheck = 0L
     private val wakeTail = ArrayDeque<ShortArray>()
     private val wakeTailLock = Any()
@@ -141,8 +140,6 @@ class WakeService : Service() {
         listening.set(false)
         job.cancel()
         wakeDevice.reinitializeToReleaseResources()
-        gigaam?.release()
-        gigaam = null
         super.onDestroy()
     }
 
@@ -250,12 +247,8 @@ class WakeService : Service() {
             return false
         }
         return try {
-            val recognizer = gigaam ?: GigaAmRecognizer(GigaAmModel.dir(this)).also { gigaam = it }
-            if (!recognizer.load()) {
-                return false
-            }
             val pcm = collectCommandAudio(ar) ?: return false
-            val text = recognizer.recognize(pcm)
+            val text = GigaAmEngine.recognize(this, pcm)
             if (text.isBlank()) {
                 Log.d(TAG, "GigaAM heard nothing")
                 return false
@@ -344,11 +337,7 @@ class WakeService : Service() {
             return true
         }
         return try {
-            val recognizer = gigaam ?: GigaAmRecognizer(GigaAmModel.dir(this)).also { gigaam = it }
-            if (!recognizer.load()) {
-                return true
-            }
-            val text = recognizer.recognize(tailAudio()).lowercase().replace('ё', 'е')
+            val text = GigaAmEngine.recognize(this, tailAudio()).lowercase().replace('ё', 'е')
             if (text.isBlank()) {
                 return true
             }

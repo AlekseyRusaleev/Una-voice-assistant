@@ -75,13 +75,13 @@
     <string name="pref_theme_dark">Dark</string>
     <string name="pref_theme_black">Black</string>
     <string name="pref_language">Language</string>
-    <string name="pref_language_summary">What language should Una use to listen to you and provide answers?</string>
+    <string name="pref_language_summary">Una understands Russian only</string>
     <string name="pref_language_system">Use system language</string>
     <string name="pref_input_method">Input method</string>
     <string name="pref_input_method_summary">Choose the service to use to talk to Una</string>
     <string name="pref_input_method_text">Only text box</string>
-    <string name="pref_input_method_vosk">Vosk offline speech recognition</string>
-    <string name="pref_input_method_vosk_summary">Downloads and runs a Vosk SpeechToText model offline inside Una</string>
+    <string name="pref_input_method_vosk">on-device speech recognition (GigaAM)</string>
+    <string name="pref_input_method_vosk_summary">The accurate model that also handles the wake word; no internet needed</string>
     <string name="pref_input_method_external_popup">External SpeechToText popup</string>
     <string name="pref_input_method_external_popup_summary">Opens the UI of another app through ACTION\u200B_\u200BRECOGNIZE\u200B_\u200BSPEECH, for example whisperIME, Kõnele, Futo Voice Input</string>
     <string name="pref_speech_output_method">Speech output method</string>
@@ -90,10 +90,10 @@
     <string name="pref_speech_output_method_toast">Toast (popup message)</string>
     <string name="pref_speech_output_method_snackbar">Snackbar (message at the bottom)</string>
     <string name="pref_speech_output_method_nothing">Nothing</string>
-    <string name="pref_wake_method">Wake word recognition method</string>
-    <string name="pref_wake_method_summary">Choose the service to use to listen for the \"Una\" wakeup word in the background</string>
+    <string name="pref_wake_method">Wake word “Una”</string>
+    <string name="pref_wake_method_summary">Una listens for its name in the background, directly on the phone</string>
     <string name="pref_wake_method_disabled">Disabled</string>
-    <string name="pref_wake_method_openwakeword">OpenWakeWord offline audio processing</string>
+    <string name="pref_wake_method_openwakeword">Enabled (on-device, offline)</string>
     <string name="pref_wake_custom_delete">Delete custom wake word</string>
     <string name="pref_wake_custom_delete_summary">Return to default \"Una\" wake word</string>
     <string name="pref_wake_custom_import">Import custom wake word</string>
@@ -266,22 +266,24 @@
     <string name="about">About</string>
     <string name="about_version">%1$s (%2$d)</string>
     <string name="about_version_copy">Copy version info</string>
-    <string name="about_description">Multilanguage, local and libre voice assistant</string>
+    <string name="about_description">Russian voice assistant that runs on the phone</string>
     <string name="about_repository_title">Source code repository</string>
     <string name="about_repository_description">Una is free and open source, licensed under GPLv3</string>
-    <string name="about_repository_link" translatable="false">https://github.com/Stypox/dicio-android</string>
-    <string name="about_wiki_title">Documentation</string>
-    <string name="about_wiki_description">Looking for general information, configuration guides, troubleshooting tips, and more? Check out our wiki!</string>
-    <string name="about_wiki_link">https://dicio.stypox.org/</string>
+    <string name="about_repository_link">https://github.com/AlekseyRusaleev/Una-voice-assistant</string>
+    <string name="about_wiki_title">How it works</string>
+    <string name="about_wiki_description">Commands, models and the update channel are described in the repository</string>
+    <string name="about_wiki_link">https://github.com/AlekseyRusaleev/Una-voice-assistant#readme</string>
     <string name="about_issues_title">Found a bug?</string>
-    <string name="about_issues_description">Feel free to request new features or report broken things (remember to attach logs)</string>
-    <string name="about_issues_link" translatable="false">https://github.com/Stypox/dicio-android/issues</string>
+    <string name="about_issues_description">Report a broken command or request a feature</string>
+    <string name="about_issues_link">https://github.com/AlekseyRusaleev/Una-voice-assistant/issues</string>
     <string name="about_contributing_title">Contributing</string>
-    <string name="about_contributing_description">Una is developed by volunteers around the world. You can help out too by contributing code improvements, translations and even new skills!</string>
-    <string name="about_contributing_link" translatable="false">https://github.com/Stypox/dicio-android#contributing</string>
+    <string name="about_contributing_description">The project grew out of Dicio by Stypox and the community; the source is open</string>
+    <string name="about_contributing_link">https://github.com/AlekseyRusaleev/Una-voice-assistant</string>
     <string name="about_privacy_title">Privacy policy</string>
-    <string name="about_privacy_description">Una connects to external services only when a skill is expected to do so, or to download machine learning models during setup. All speech processing is performed locally on-device, and most skills can be used offline.</string>
-    <string name="about_privacy_link" translatable="false">https://stypox.org/dicio-privacy-policy.html</string>
+    <string name="about_privacy_description">Speech is processed on the device. Notes, SMS and calendar entries never leave the phone unless you upload them yourself.</string>
+    <string name="about_privacy_link">https://github.com/AlekseyRusaleev/Una-voice-assistant/blob/main/PRIVACY.md</string>
     <string name="notes">Notes</string>
     <string name="permissions">Permissions</string>
+    <string name="pref_wake_method_on">Enabled (on-device, offline)</string>
+    <string name="pref_wake_method_on_summary">Listens for “Una” without the internet</string>
 </resources>

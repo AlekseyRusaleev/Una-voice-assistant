@@ -20,6 +20,11 @@ class WeatherSkill(correspondingSkillInfo: SkillInfo, data: StandardRecognizerDa
     override suspend fun generateOutput(ctx: SkillContext, inputData: Weather): SkillOutput {
         val prefs = ctx.android.weatherDataStore.data.first()
         val city = getCity(prefs, inputData) ?: return WeatherOutput.Failed(city = "")
+        if (API_KEY.isBlank()) {
+            // the skill stays in the list for people who build Una with their own key; shipping
+            // someone else's shared key would silently stop working and leak their quota
+            return WeatherOutput.Failed(city = city)
+        }
 
         val weatherData = try {
             ConnectionUtils.getPageJson(
@@ -78,7 +83,8 @@ class WeatherSkill(correspondingSkillInfo: SkillInfo, data: StandardRecognizerDa
     companion object {
         private const val IP_INFO_URL = "https://ipinfo.io/json"
         private const val WEATHER_API_URL = "https://api.openweathermap.org/data/2.5/weather"
-        private const val API_KEY = "061f24cf3cde2f60644a8240302983f2"
+        /** Put your own OpenWeatherMap key here to enable the weather skill. */
+        private const val API_KEY = ""
         private const val ICON_BASE_URL = "https://openweathermap.org/img/wn/"
         private const val ICON_FORMAT = "@2x.png"
     }

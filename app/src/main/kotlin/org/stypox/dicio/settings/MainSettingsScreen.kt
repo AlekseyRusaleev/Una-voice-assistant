@@ -1,9 +1,7 @@
-package org.stypox.dicio.settings
+﻿package org.stypox.dicio.settings
 
 import android.app.Application
 import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -11,9 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,11 +71,6 @@ private fun MainSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val settings by viewModel.settingsState.collectAsState()
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
-        if (it != null) {
-            viewModel.addOwwUserWakeFile(it)
-        }
-    }
 
     LazyColumn(modifier) {
         /* GENERAL SETTINGS */
@@ -87,8 +78,10 @@ private fun MainSettingsScreen(
         item {
             languageSetting().Render(
                 when (val language = settings.language) {
-                    Language.UNRECOGNIZED -> Language.LANGUAGE_SYSTEM
-                    else -> language
+                    Language.UNRECOGNIZED,
+                    Language.LANGUAGE_SYSTEM -> Language.LANGUAGE_SYSTEM
+                    // Una understands Russian only, so a stored foreign language falls back to it
+                    else -> Language.LANGUAGE_RU
                 },
                 viewModel::setLanguage,
             )
@@ -143,29 +136,6 @@ private fun MainSettingsScreen(
                 wakeDevice,
                 viewModel::setWakeDevice,
             )
-        }
-        if (wakeDevice == WakeDevice.WAKE_DEVICE_OWW) {
-            /* OpenWakeWord-specific settings */
-            item {
-                val isHeyDicio by viewModel.isHeyDicio.collectAsState(true)
-                if (isHeyDicio) {
-                    // the wake word is "Hey Dicio", so there is no custom model at the moment
-                    SettingsItem(
-                        modifier = Modifier.clickable { importLauncher.launch(arrayOf("*/*")) },
-                        title = stringResource(R.string.pref_wake_custom_import),
-                        icon = Icons.Default.UploadFile,
-                        description = stringResource(R.string.pref_wake_custom_import_summary_oww),
-                    )
-                } else {
-                    // a custom model is currently set, give the option to remove it
-                    SettingsItem(
-                        modifier = Modifier.clickable { viewModel.removeOwwUserWakeFile() },
-                        title = stringResource(R.string.pref_wake_custom_delete),
-                        icon = Icons.Default.DeleteSweep,
-                        description = stringResource(R.string.pref_wake_custom_delete_summary),
-                    )
-                }
-            }
         }
         item {
             speechOutputDevice().Render(
