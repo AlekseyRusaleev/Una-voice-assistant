@@ -132,6 +132,7 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
             )
 
             StatsCard(
+                context = context,
                 triggers = triggers,
                 rejected = rejected,
                 commands = commands,
@@ -286,6 +287,12 @@ private fun UpdateCard(onResult: (String) -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text(
+                "Скачано обновлений: ${Updater.totalBytes(context) / 1024 / 1024} МБ всего, " +
+                    "проверка раз в 6 часов",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             status?.let { current ->
                 Spacer(Modifier.height(6.dp))
                 if (current.remoteCode > 0) {
@@ -420,6 +427,7 @@ private fun UpdateCard(onResult: (String) -> Unit) {
 
 @Composable
 private fun StatsCard(
+    context: android.content.Context,
     triggers: Int,
     rejected: Int,
     commands: Int,
@@ -430,6 +438,9 @@ private fun StatsCard(
     onUplinkChange: (Boolean) -> Unit,
     onReset: () -> Unit,
 ) {
+    val skipped = WakeStats.skippedPercent(context)
+    val cpu = WakeStats.cpuPercent(context)
+
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text("Триггеры имени", style = MaterialTheme.typography.titleSmall)
@@ -437,6 +448,12 @@ private fun StatsCard(
             Text(
                 "Сработало: $triggers · отклонено проверкой: $rejected · с командой: $commands",
                 style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Тишина пропущена без распознавания: $skipped% · процессор: $cpu%",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (nearMisses > 0) {
                 Spacer(Modifier.height(4.dp))

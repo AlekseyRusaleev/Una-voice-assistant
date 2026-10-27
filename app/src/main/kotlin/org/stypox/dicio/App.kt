@@ -25,7 +25,8 @@ class App : Application() {
         RemoteConfig.refresh(this)
         // accurate on-device recogniser for commands (~216 MB, downloaded once)
         GigaAmModel.downloadIfNeeded(this)
-        // send the recognition journal to the backend (opt-out in the journal screen)
+        // free the APK left over from a previous update, then check for a new one
+        Updater.dropCachedApk(this)
         Updater.checkAndUpdate(this)
         thread(name = "una-startup") {
             Device.ensureRegistered(this)

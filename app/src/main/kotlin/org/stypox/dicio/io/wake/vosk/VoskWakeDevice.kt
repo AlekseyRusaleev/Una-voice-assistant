@@ -48,6 +48,7 @@ class VoskWakeDevice(
     private var recognizer: Recognizer? = null
     private var logLevelSet = false
     private var detectedCommand: String? = null
+    private var pcmBuffer = ByteArray(0)
 
     private fun isModelPresent() = File(modelDir, "ivector").isDirectory
 
@@ -107,7 +108,11 @@ class VoskWakeDevice(
         }
 
         val rec = recognizer ?: return false
-        val bytes = ByteArray(audio16bitPcm.size * 2)
+        // the buffer is reused: a fresh array every 80 ms is pure garbage collector pressure
+        if (pcmBuffer.size != audio16bitPcm.size * 2) {
+            pcmBuffer = ByteArray(audio16bitPcm.size * 2)
+        }
+        val bytes = pcmBuffer
         var i = 0
         for (sample in audio16bitPcm) {
             val v = sample.toInt()

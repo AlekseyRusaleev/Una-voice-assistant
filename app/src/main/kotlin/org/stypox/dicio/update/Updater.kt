@@ -30,6 +30,22 @@ object Updater {
     private const val CHANNEL_ID = "una_updates"
     private const val NOTIFICATION_ID = 424242
 
+    private const val PREFS = "una_updater"
+    private const val KEY_APK_CODE = "apk_code"       // versionCode of the APK on disk
+    private const val KEY_APK_SHA = "apk_sha"
+    private const val KEY_NOTIFIED_CODE = "notified_code"
+    private const val KEY_NOTIFIED_AT = "notified_at"
+    private const val KEY_LAST_CHECK = "last_check"
+    private const val KEY_BYTES = "total_bytes"
+
+    /** Background checks are rare: the payload is ~53 MB, so polling often is pure waste. */
+    private const val BACKGROUND_INTERVAL_MILLIS = 6L * 60 * 60 * 1000
+    private const val NOTIFY_AGAIN_MILLIS = 12L * 60 * 60 * 1000
+
+    // two call sites (app start and the wake service) could download at the same time: only one
+    // check may run at once, otherwise the radio stays busy and the traffic doubles
+    private val inFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
     enum class Outcome { UP_TO_DATE, READY_TO_INSTALL, ERROR }
 
     data class UpdateStatus(
@@ -40,20 +56,36 @@ object Updater {
         val outcome: Outcome,
         val message: String,
         val apk: File? = null,
+        val downloadedBytes: Long = 0,
     )
+
+    fun totalBytes(context: Context): Long = prefs(context).getLong(KEY_BYTES, 0L)
 
     /** Background check used on start-up and from the wake service. */
     fun checkAndUpdate(context: Context) {
+        val prefs = prefs(context)
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong(KEY_LAST_CHECK, 0L) < BACKGROUND_INTERVAL_MILLIS) {
+            return
+        }
+        prefs.edit().putLong(KEY_LAST_CHECK, now).apply()
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
         thread(name = "una-update") {
-            val status = runCatching { checkNow(context) }
-                .getOrElse {
-                    Log.w(TAG, "update check failed", it)
-                    UpdateStatus(
-                        BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, 0, "",
-                        Outcome.ERROR, "Ошибка проверки: ${it.message ?: it.javaClass.simpleName}",
-                    )
-                }
-            Log.i(TAG, "update: ${status.outcome} ${status.message}")
+            try {
+                val status = runCatching { checkNow(context) }
+                    .getOrElse {
+                        Log.w(TAG, "update check failed", it)
+                        UpdateStatus(
+                            BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, 0, "",
+                            Outcome.ERROR, "Ошибка проверки: ${it.message ?: it.javaClass.simpleName}",
+                        )
+                    }
+                Log.i(TAG, "update: ${status.outcome} ${status.message}")
+            } finally {
+                inFlight.set(false)
+            }
         }
     }
 
@@ -63,6 +95,8 @@ object Updater {
     fun checkNow(context: Context, onStage: (String) -> Unit = {}): UpdateStatus {
         val installedCode = BuildConfig.VERSION_CODE
         val installedName = BuildConfig.VERSION_NAME
+        val prefs = prefs(context)
+        var downloaded = 0L
 
         fun error(text: String, remoteCode: Int = 0, remoteName: String = "") =
             UpdateStatus(installedCode, installedName, remoteCode, remoteName, Outcome.ERROR, text)
@@ -73,6 +107,8 @@ object Updater {
         val remoteName = info.optString("versionName", "новая")
 
         if (remoteCode <= installedCode) {
+            // the APK we downloaded earlier is of no use any more: free the 53 MB
+            dropCachedApk(context)
             return UpdateStatus(
                 installedCode, installedName, remoteCode, remoteName, Outcome.UP_TO_DATE,
                 "Установлена последняя версия",
@@ -84,40 +120,87 @@ object Updater {
         // filesDir, not cacheDir: a 57 MB APK may be evicted from the cache
         val file = File(File(context.filesDir, "updates"), "una-update.apk")
         file.parentFile?.mkdirs()
-        file.delete()
 
-        onStage("Скачиваю ${remoteName}…")
-        download(url, file) { done, total ->
-            val doneMb = done / 1024 / 1024
-            onStage(
-                if (total > 0) {
-                    "Скачиваю $doneMb из ${total / 1024 / 1024} МБ…"
-                } else {
-                    "Скачиваю $doneMb МБ…"
-                }
-            )
-        }?.let { reason ->
-            return error("Не удалось скачать: $reason", remoteCode, remoteName)
-        }
+        // an APK of exactly this version that was downloaded before is reused instead of being
+        // fetched again: this is what used to eat hundreds of megabytes of mobile data
+        val cached = file.exists() &&
+            prefs.getInt(KEY_APK_CODE, 0) == remoteCode &&
+            expected.isNotEmpty() &&
+            prefs.getString(KEY_APK_SHA, "").orEmpty().equals(expected, ignoreCase = true) &&
+            file.length() > MIN_APK_BYTES
 
-        onStage("Проверяю контрольную сумму…")
-        if (expected.isNotEmpty() && sha256(file) != expected) {
-            val size = file.length() / 1024 / 1024
+        if (cached) {
+            onStage("Уже скачано ранее")
+        } else {
             file.delete()
-            return error("Контрольная сумма не совпала (скачано $size МБ)", remoteCode, remoteName)
+            onStage("Скачиваю ${remoteName}…")
+            download(url, file) { done, total ->
+                downloaded = done
+                val doneMb = done / 1024 / 1024
+                onStage(
+                    if (total > 0) {
+                        "Скачиваю $doneMb из ${total / 1024 / 1024} МБ…"
+                    } else {
+                        "Скачиваю $doneMb МБ…"
+                    }
+                )
+            }?.let { reason ->
+                return error("Не удалось скачать: $reason", remoteCode, remoteName)
+            }
+
+            onStage("Проверяю контрольную сумму…")
+            if (expected.isNotEmpty() && sha256(file) != expected) {
+                val size = file.length() / 1024 / 1024
+                file.delete()
+                return error("Контрольная сумма не совпала (скачано $size МБ)", remoteCode, remoteName)
+            }
+            prefs.edit()
+                .putInt(KEY_APK_CODE, remoteCode)
+                .putString(KEY_APK_SHA, expected)
+                .putLong(KEY_BYTES, prefs.getLong(KEY_BYTES, 0L) + file.length())
+                .apply()
         }
 
-        notify(
-            context,
-            "Обновление $remoteName готово",
-            "Нажмите, чтобы установить",
-            installPendingIntent(context, file),
-        )
+        val notifiedAt = prefs.getLong(KEY_NOTIFIED_AT, 0L)
+        val repeat = prefs.getInt(KEY_NOTIFIED_CODE, 0) != remoteCode ||
+            System.currentTimeMillis() - notifiedAt > NOTIFY_AGAIN_MILLIS
+        if (repeat) {
+            prefs.edit()
+                .putInt(KEY_NOTIFIED_CODE, remoteCode)
+                .putLong(KEY_NOTIFIED_AT, System.currentTimeMillis())
+                .apply()
+            notify(
+                context,
+                "Обновление $remoteName готово",
+                "Нажмите, чтобы установить",
+                installPendingIntent(context, file),
+            )
+        }
+
         return UpdateStatus(
             installedCode, installedName, remoteCode, remoteName, Outcome.READY_TO_INSTALL,
-            "Скачано ${file.length() / 1024 / 1024} МБ, можно устанавливать",
+            if (cached) {
+                "Скачано ранее, можно устанавливать"
+            } else {
+                "Скачано ${file.length() / 1024 / 1024} МБ, можно устанавливать"
+            },
             file,
+            downloaded,
         )
+    }
+
+    /** Removes a downloaded APK that is not newer than the installed version. */
+    fun dropCachedApk(context: Context) {
+        val prefs = prefs(context)
+        val file = File(File(context.filesDir, "updates"), "una-update.apk")
+        if (file.exists() && prefs.getInt(KEY_APK_CODE, 0) <= BuildConfig.VERSION_CODE) {
+            file.delete()
+            prefs.edit()
+                .remove(KEY_APK_CODE)
+                .remove(KEY_APK_SHA)
+                .remove(KEY_NOTIFIED_CODE)
+                .apply()
+        }
     }
 
     /** Opens the system installer for an already downloaded APK. Needs a foreground activity. */
@@ -148,6 +231,12 @@ object Updater {
 
     fun notificationsEnabled(context: Context): Boolean =
         androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /** An APK smaller than this is a truncated download and must not be reused. */
+    private const val MIN_APK_BYTES = 10L * 1024 * 1024
 
     private fun fetchVersion(): JSONObject? = try {
         val connection = (URL("$BASE_URL/version").openConnection() as HttpURLConnection).apply {

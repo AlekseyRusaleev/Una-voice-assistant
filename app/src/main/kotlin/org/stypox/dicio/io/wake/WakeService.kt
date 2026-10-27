@@ -14,6 +14,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.PowerManager
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -51,7 +52,7 @@ class WakeService : Service() {
     private val scope = CoroutineScope(Dispatchers.Default + job)
 
     private val listening = AtomicBoolean(false)
-    private var lastUpdateCheck = 0L
+    private var lastMaintenance = 0L
     private val wakeTail = ArrayDeque<ShortArray>()
     private val wakeTailLock = Any()
 
@@ -188,39 +189,111 @@ class WakeService : Service() {
             6400,
         )
 
-        var audio = ShortArray(0)
+        val frameSize = wakeDevice.frameSize()
+        val frame = ShortArray(frameSize)
+        val preroll = ArrayDeque<ShortArray>()
+
         var nextWakeWordAllowed = Instant.MIN
+        var speechInProgress = false
+        var silentMillis = 0L
+        var lastHeardSecond = 0L
 
         try {
             ar.startRecording()
             while (listening.get()) {
-                if (audio.size != wakeDevice.frameSize()) {
-                    audio = ShortArray(wakeDevice.frameSize())
+                val read = ar.read(frame, 0, frameSize)
+                if (read <= 0) {
+                    continue
+                }
+                rememberFrame(frame, read)
+
+                val level = rms(frame, read)
+                val gateOpen = level > GATE_RMS
+                if (gateOpen) {
+                    speechInProgress = true
+                    silentMillis = 0
+                } else if (speechInProgress) {
+                    silentMillis += FRAME_MILLIS
+                    if (silentMillis >= GATE_HANGOVER_MILLIS) {
+                        speechInProgress = false
+                        // a short pause closes the decoder's utterance before going idle
+                        wakeDevice.processFrame(SILENCE_FRAME)
+                    }
                 }
 
-                ar.read(audio, 0, audio.size)
-                rememberFrame(audio)
+                val detected = if (gateOpen || speechInProgress) {
+                    // the name may start quietly: replay the buffered frames before this one
+                    var fired = false
+                    while (preroll.isNotEmpty()) {
+                        fired = wakeDevice.processFrame(preroll.removeFirst()) || fired
+                    }
+                    wakeDevice.processFrame(frame.copyOf(read)) || fired
+                } else {
+                    // silence: keep a few frames for the case the name starts quietly and skip
+                    // decoding altogether, which is where most of the always-on CPU went
+                    preroll.addLast(frame.copyOf(read))
+                    while (preroll.size > PREROLL_FRAMES) {
+                        preroll.removeFirst()
+                    }
+                    WakeStats.onSkippedFrame()
+                    false
+                }
+                WakeStats.onFrame()
 
-                val wakeWordDetected = wakeDevice.processFrame(audio)
-                if (wakeWordDetected && Instant.now() > nextWakeWordAllowed) {
-                    nextWakeWordAllowed = Instant.now().plusMillis(WAKE_WORD_BACKOFF_MILLIS)
+                val now = System.currentTimeMillis()
+                if (detected && now > nextWakeWordAllowed.toEpochMilli()) {
+                    nextWakeWordAllowed = Instant.ofEpochMilli(now + WAKE_WORD_BACKOFF_MILLIS)
                     onWakeWordDetected(ar)
                 }
 
-                lastHeard.set(Instant.now())
+                // the UI only needs second precision, not 12 updates per second
+                val nowSecond = now / 1000
+                if (nowSecond != lastHeardSecond) {
+                    lastHeardSecond = nowSecond
+                    lastHeard.set(Instant.ofEpochSecond(nowSecond))
+                }
 
-                // the service outlives the activity, so updates and the journal uplink must run
-                // here as well: otherwise a phone that is never unlocked sends nothing
-                if (System.currentTimeMillis() - lastUpdateCheck > UPDATE_CHECK_INTERVAL_MILLIS) {
-                    lastUpdateCheck = System.currentTimeMillis()
-                    org.stypox.dicio.update.Updater.checkAndUpdate(this)
-                    org.stypox.dicio.eval.Uplink.sendJournal(this)
+                // the service outlives the activity: the journal is uploaded from here too, and
+                // the updater throttles its own (rare) checks internally
+                if (now - lastMaintenance > MAINTENANCE_INTERVAL_MILLIS) {
+                    lastMaintenance = now
+                    onMaintenanceTick()
                 }
             }
         } finally {
             ar.stop()
             ar.release()
         }
+    }
+
+    /** Rare background work: journal upload, update check and CPU accounting. */
+    private fun onMaintenanceTick() {
+        val cpuNow = android.os.Process.getElapsedCpuTime()
+        val wallNow = System.currentTimeMillis()
+        val previousCpu = WakeStats.cpuBaseline(this)
+        val previousWall = WakeStats.wallBaseline(this)
+        if (previousCpu >= 0 && previousWall > 0 && wallNow > previousWall) {
+            WakeStats.addCpuDelta(this, cpuNow - previousCpu, wallNow - previousWall)
+        }
+        WakeStats.setBaseline(this, cpuNow, wallNow)
+        WakeStats.flushFrames(this)
+
+        if (!isPowerSaver()) {
+            org.stypox.dicio.update.Updater.checkAndUpdate(this)
+            org.stypox.dicio.eval.Uplink.sendJournal(this)
+        }
+    }
+
+    private fun isPowerSaver(): Boolean =
+        (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isPowerSaveMode == true
+
+    private fun rms(samples: ShortArray, count: Int): Double {
+        var energy = 0.0
+        for (i in 0 until count) {
+            val value = samples[i].toDouble()
+            energy += value * value
+        }
+        return kotlin.math.sqrt(energy / count)
     }
 
     /**
@@ -294,9 +367,9 @@ class WakeService : Service() {
         return out
     }
 
-    private fun rememberFrame(frame: ShortArray) {
+    private fun rememberFrame(frame: ShortArray, count: Int) {
         synchronized(wakeTailLock) {
-            wakeTail.addLast(frame.copyOf())
+            wakeTail.addLast(frame.copyOf(count))
             while (wakeTail.size > WAKE_TAIL_FRAMES) {
                 wakeTail.removeFirst()
             }
@@ -533,7 +606,23 @@ class WakeService : Service() {
         private const val MIN_COMMAND_SAMPLES = 1600
 
         /** How often the running service looks for a new version. */
-        private const val UPDATE_CHECK_INTERVAL_MILLIS = 30L * 60 * 1000
+        /** Journal upload and updater tick: the updater itself only acts every few hours. */
+        private const val MAINTENANCE_INTERVAL_MILLIS = 30L * 60 * 1000
+
+        /**
+         * Level above which a frame is considered speech. Quiet rooms stay far below it, and only
+         * speech is decoded, which is where most of the always-on battery went.
+         */
+        private const val GATE_RMS = 700.0
+
+        /** How long speech is assumed to continue after the level dropped. */
+        private const val GATE_HANGOVER_MILLIS = 600
+
+        /** Frames kept while silent, so a quiet start of the name is not lost. */
+        private const val PREROLL_FRAMES = 6
+
+        /** Fed to the decoder to close the utterance after speech stops. */
+        private val SILENCE_FRAME = ShortArray(1280)
 
         /** ~2.2 s of audio kept for the strict wake word check. */
         private const val WAKE_TAIL_FRAMES = 28
