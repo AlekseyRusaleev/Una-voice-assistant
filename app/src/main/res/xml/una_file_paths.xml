@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <cache-path name="updates" path="." />
+    <!-- the update APK lives in filesDir/updates, not in the cache -->
+    <files-path name="updates" path="updates/" />
+    <cache-path name="cache" path="." />
 </paths>

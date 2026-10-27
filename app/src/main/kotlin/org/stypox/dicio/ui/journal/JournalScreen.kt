@@ -290,6 +290,8 @@ private fun UpdateCard(onResult: (String) -> Unit) {
     var stage by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<Updater.UpdateStatus?>(null) }
     var dialog by remember { mutableStateOf<Updater.UpdateStatus?>(null) }
+    val currentRemoteCode = status?.remoteCode ?: 0
+    val currentRemoteName = status?.remoteName.orEmpty()
     val notifications = remember { Updater.notificationsEnabled(context) }
 
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
@@ -381,8 +383,17 @@ private fun UpdateCard(onResult: (String) -> Unit) {
                 if (status?.outcome == Updater.Outcome.READY_TO_INSTALL && apk != null) {
                     TextButton(
                         onClick = {
-                            if (!Updater.installNow(context, apk)) {
-                                onResult("Обновление: установщик не открылся")
+                            val error = Updater.installNow(context, apk)
+                            if (error != null) {
+                                dialog = Updater.UpdateStatus(
+                                    BuildConfig.VERSION_CODE,
+                                    BuildConfig.VERSION_NAME,
+                                    currentRemoteCode,
+                                    currentRemoteName,
+                                    Updater.Outcome.ERROR,
+                                    error,
+                                )
+                                onResult("Обновление: $error")
                             }
                         },
                     ) {
@@ -421,9 +432,21 @@ private fun UpdateCard(onResult: (String) -> Unit) {
             confirmButton = {
                 if (current.outcome == Updater.Outcome.READY_TO_INSTALL && apk != null) {
                     TextButton(onClick = {
-                        dialog = null
-                        if (!Updater.installNow(context, apk)) {
-                            onResult("Обновление: установщик не открылся")
+                        val error = Updater.installNow(context, apk)
+                        dialog = if (error == null) {
+                            null
+                        } else {
+                            Updater.UpdateStatus(
+                                BuildConfig.VERSION_CODE,
+                                BuildConfig.VERSION_NAME,
+                                BuildConfig.VERSION_CODE,
+                                "",
+                                Updater.Outcome.ERROR,
+                                error,
+                            )
+                        }
+                        if (error != null) {
+                            onResult("Обновление: $error")
                         }
                     }) { Text("Установить") }
                 } else {

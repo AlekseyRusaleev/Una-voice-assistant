@@ -216,30 +216,38 @@ object Updater {
         }
     }
 
-    /** Opens the system installer for an already downloaded APK. Needs a foreground activity. */
-    fun installNow(context: Context, file: File): Boolean = try {
-        if (!file.exists()) {
-            false
-        } else {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(
-                        FileProvider.getUriForFile(
-                            context, "${context.packageName}.files", file,
-                        ),
-                        "application/vnd.android.package-archive",
-                    )
-                    addFlags(
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                            Intent.FLAG_ACTIVITY_NEW_TASK
-                    )
-                }
-            )
-            true
+    /**
+     * Opens the system installer for an already downloaded APK. Needs a foreground activity.
+     * @return null on success, otherwise a message for the user: a silent failure here looks
+     * exactly like a dead button.
+     */
+    fun installNow(context: Context, file: File): String? = try {
+        when {
+            !file.exists() -> "файл обновления не найден, скачайте заново"
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !context.packageManager.canRequestPackageInstalls() ->
+                "разрешите установку: Настройки → Приложения → Una → Установка неизвестных приложений"
+            else -> {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(
+                            FileProvider.getUriForFile(
+                                context, "${context.packageName}.files", file,
+                            ),
+                            "application/vnd.android.package-archive",
+                        )
+                        addFlags(
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_ACTIVITY_NEW_TASK
+                        )
+                    }
+                )
+                null
+            }
         }
     } catch (t: Throwable) {
         Log.w(TAG, "cannot start the installer", t)
-        false
+        "не удалось открыть установщик: ${t.message ?: t.javaClass.simpleName}"
     }
 
     fun notificationsEnabled(context: Context): Boolean =
