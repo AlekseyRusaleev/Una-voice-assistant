@@ -14,15 +14,23 @@ object WakeStats {
     private const val KEY_TRIGGERS = "triggers"
     private const val KEY_REJECTED = "rejected"
     private const val KEY_COMMANDS = "commands"
+    private const val KEY_NEAR = "near"
     private const val KEY_STRICT = "strict"
 
     fun triggers(context: Context): Int = read(context, KEY_TRIGGERS)
     fun rejected(context: Context): Int = read(context, KEY_REJECTED)
     fun commands(context: Context): Int = read(context, KEY_COMMANDS)
 
+    /**
+     * Wake attempts that were recognised but thrown away because the detector was not sure enough.
+     * A high number here means the threshold, not the word, is losing wake-ups.
+     */
+    fun nearMisses(context: Context): Int = read(context, KEY_NEAR)
+
     fun onTrigger(context: Context) = bump(context, KEY_TRIGGERS)
     fun onRejected(context: Context) = bump(context, KEY_REJECTED)
     fun onCommand(context: Context) = bump(context, KEY_COMMANDS)
+    fun onNearMiss(context: Context) = bump(context, KEY_NEAR)
 
     /** Strict mode re-checks every trigger with the accurate model before doing anything. */
     fun isStrict(context: Context): Boolean =

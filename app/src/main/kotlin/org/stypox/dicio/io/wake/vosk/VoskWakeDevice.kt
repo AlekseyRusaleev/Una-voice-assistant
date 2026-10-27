@@ -13,6 +13,7 @@ import okhttp3.OkHttpClient
 import org.json.JSONObject
 import org.stypox.dicio.io.wake.WakeDevice
 import org.stypox.dicio.io.wake.WakeState
+import org.stypox.dicio.io.wake.WakeStats
 import org.stypox.dicio.ui.util.Progress
 import org.stypox.dicio.util.FileToDownload
 import org.stypox.dicio.util.downloadBinaryFilesWithPartial
@@ -165,8 +166,19 @@ class VoskWakeDevice(
                 continue
             }
             if (!seenWakeWord) {
+                // "слушай, юна" is as good as "юна"
+                if (word in PREFIX_WORDS) {
+                    continue
+                }
                 val confidence = item.optDouble("conf", 0.0)
-                if (word != WAKE_WORD || confidence < MIN_WAKE_CONFIDENCE) {
+                if (word !in WAKE_WORDS) {
+                    return "" to false
+                }
+                if (confidence < MIN_WAKE_CONFIDENCE) {
+                    // the name was heard but the detector is unsure: worth counting, so that
+                    // tuning is driven by numbers and not by "it feels like it misses a lot"
+                    WakeStats.onNearMiss(appContext)
+                    Log.d(TAG, "near miss: $word at $confidence")
                     return "" to false
                 }
                 seenWakeWord = true
@@ -209,21 +221,35 @@ class VoskWakeDevice(
         /** 80 ms of audio at 16 kHz, the same frame size the OpenWakeWord device uses. */
         private const val FRAME_SIZE = 1280
 
-        /** The name the assistant listens for. */
-        private const val WAKE_WORD = "юна"
+        /**
+         * Every spelling of the name the decoder is allowed to produce. Short Russian names get
+         * clipped easily ("юна" → "уна", "юнна"), so all plausible variants are triggers: it is
+         * far better to catch a variant and let the strict check confirm it than to miss the name.
+         */
+        private val WAKE_WORDS = setOf("юна", "юнна", "уна", "юнона")
 
         /**
-         * How sure Vosk must be about the wake word itself. Lower values make the assistant react
-         * to background speech; higher values make it miss quiet or slurred speech.
+         * Words people naturally say before the name ("слушай, юна"). They are skipped while
+         * looking for the wake word, so both "юна, ..." and "слушай, юна, ..." work.
          */
-        private const val MIN_WAKE_CONFIDENCE = 0.85
+        private val PREFIX_WORDS = setOf("слушай", "слушайте", "эй", "привет", "окей", "ок", "алло")
+
+        /**
+         * How sure Vosk must be about the wake word itself.
+         *
+         * This used to be 0.85, which silently lost clipped or quiet "юна" — the strict GigaAM
+         * re-check is the real arbiter anyway, so a lenient value here trades a few extra
+         * verifications for a lot fewer dead wake-ups.
+         */
+        private const val MIN_WAKE_CONFIDENCE = 0.72
 
         /**
          * The decoder is limited to the wake word plus the words our commands are made of, so that
          * a phrase like "юна следующий трек" is decoded in full. Everything else becomes [unk].
          */
         private val GRAMMAR = """
-            ["юна","следующий","следующая","трек","песня","песню","музыка","музыку","плеер",
+            ["юна","юнна","уна","юнона","слушай","слушайте","эй","привет","окей","ок","алло",
+             "следующий","следующая","трек","песня","песню","музыка","музыку","плеер",
              "пауза","стоп","продолжи","продолжить","играй","включи","включить","выключи",
              "переключи","переключить","дальше","назад","предыдущий","предыдущая","прошлый",
              "верни","вернуть","пропусти","пропустить","промотай","поставь","поставить",

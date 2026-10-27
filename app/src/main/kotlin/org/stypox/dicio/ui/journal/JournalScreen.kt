@@ -59,6 +59,7 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
     var triggers by remember { mutableStateOf(WakeStats.triggers(context)) }
     var rejected by remember { mutableStateOf(WakeStats.rejected(context)) }
     var commands by remember { mutableStateOf(WakeStats.commands(context)) }
+    var nearMisses by remember { mutableStateOf(WakeStats.nearMisses(context)) }
     var strict by remember { mutableStateOf(WakeStats.isStrict(context)) }
     var uplink by remember { mutableStateOf(Uplink.isEnabled(context)) }
     var showConsent by remember { mutableStateOf(false) }
@@ -70,6 +71,7 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
             triggers = WakeStats.triggers(context)
             rejected = WakeStats.rejected(context)
             commands = WakeStats.commands(context)
+            nearMisses = WakeStats.nearMisses(context)
             delay(1500)
         }
     }
@@ -125,6 +127,7 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
                 triggers = triggers,
                 rejected = rejected,
                 commands = commands,
+                nearMisses = nearMisses,
                 strict = strict,
                 uplink = uplink,
                 onStrictChange = {
@@ -261,6 +264,7 @@ private fun StatsCard(
     triggers: Int,
     rejected: Int,
     commands: Int,
+    nearMisses: Int,
     strict: Boolean,
     uplink: Boolean,
     onStrictChange: (Boolean) -> Unit,
@@ -275,6 +279,14 @@ private fun StatsCard(
                 "Сработало: $triggers · отклонено проверкой: $rejected · с командой: $commands",
                 style = MaterialTheme.typography.bodySmall,
             )
+            if (nearMisses > 0) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Почти: $nearMisses — имя услышано, но неуверенно. Растёт — поднимите чувствительность.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
