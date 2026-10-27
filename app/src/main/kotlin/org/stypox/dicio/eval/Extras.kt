@@ -118,6 +118,53 @@ object Extras {
             return true
         }
 
+        // ---- notifications: read
+        if (listOf("уведомлен", "что мне писали", "кто писал", "что писали").any { text.contains(it) }) {
+            if (!NotifyHandler.available()) {
+                notify(
+                    context, "Уведомления",
+                    "Нет доступа: Настройки → Специальный доступ → Доступ к уведомлениям → Una",
+                )
+            } else {
+                val lines = NotifyHandler.Instance?.summary() ?: emptyList()
+                notify(
+                    context, "Уведомления (${lines.size})",
+                    if (lines.isEmpty()) "Новых нет" else lines.joinToString("\n"),
+                )
+            }
+            return true
+        }
+
+        // ---- notifications: quick reply
+        val replyVerb = when {
+            text.startsWith("ответь") -> "ответь"
+            text.startsWith("напиши") -> "напиши"
+            else -> null
+        }
+        if (replyVerb != null) {
+            val rest = text.removePrefix(replyVerb).trim()
+            val separator = rest.indexOfAny(charArrayOf(':', '—'))
+            val who: String
+            val message: String
+            if (separator > 0) {
+                who = rest.substring(0, separator).trim()
+                message = rest.substring(separator + 1).trim()
+            } else {
+                val parts = rest.split(' ', limit = 2)
+                who = parts.getOrNull(0).orEmpty()
+                message = parts.getOrNull(1).orEmpty()
+            }
+            if (who.isNotEmpty() && message.isNotEmpty()) {
+                val sent = NotifyHandler.Instance?.reply(who, message) ?: false
+                notify(
+                    context, "Ответ",
+                    if (sent) "Отправил «$who»: $message"
+                    else "Не нашёл чат «$who» с быстрым ответом",
+                )
+                return true
+            }
+        }
+
         // ---- battery
         if (text.contains("заряд") || text.contains("батаре")) {
             val manager = context.getSystemService<BatteryManager>()

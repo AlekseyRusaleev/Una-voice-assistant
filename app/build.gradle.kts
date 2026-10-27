@@ -33,8 +33,8 @@ android {
         applicationId = "ai.una.assistant"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 18
-        versionName = "1.8.0-una"
+        versionCode = 19
+        versionName = "1.9.0-una"
         testInstrumentationRunner = "org.stypox.dicio.CustomTestRunner"
 
         vectorDrawables.useSupportLibrary = true
