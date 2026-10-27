@@ -27,3 +27,7 @@ build/
 checkouts/
 *.apk
 
+
+# release signing
+keystore.properties
+../secrets/

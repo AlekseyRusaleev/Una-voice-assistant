@@ -1,4 +1,6 @@
-﻿import org.eclipse.jgit.api.Git
+﻿import java.util.Properties
+
+import org.eclipse.jgit.api.Git
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.stypox.dicio.unicodeCldrPlugin.UnicodeCldrLanguagesTask
 
@@ -33,14 +35,33 @@ android {
         applicationId = "ai.una.assistant"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 37
-        versionName = "2.16.0-una"
+        versionCode = 38
+        versionName = "2.17.0-una"
         testInstrumentationRunner = "org.stypox.dicio.CustomTestRunner"
 
         vectorDrawables.useSupportLibrary = true
 
         ndk {
             abiFilters += arrayOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    // Release signing: the keystore and its passwords live in keystore.properties, which is not
+    // in the repository, so a clone can still build an unsigned APK.
+    val keystoreProperties = Properties()
+    val keystoreFile = rootProject.file("../secrets/keystore.properties")
+    if (keystoreFile.exists()) {
+        keystoreFile.inputStream().use { keystoreProperties.load(it) }
+    }
+
+    signingConfigs {
+        if (keystoreFile.exists()) {
+            create("unaRelease") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
         }
     }
 
@@ -60,6 +81,8 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // the shipped APK must be signed by our own key, not by the public Android debug key
+            signingConfig = signingConfigs.findByName("unaRelease")
         }
     }
 

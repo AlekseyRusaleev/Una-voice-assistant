@@ -5,6 +5,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.PackageInfo
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
@@ -161,6 +163,17 @@ object Updater {
                 .apply()
         }
 
+        if (!signedByUs(context, file)) {
+            file.delete()
+            prefs.edit().remove(KEY_APK_CODE).remove(KEY_APK_SHA).apply()
+            return error(
+                "APK подписан другим ключом: сервер отдал чужую сборку или ключ сменился. " +
+                    "Удалите приложение и установите APK вручную.",
+                remoteCode,
+                remoteName,
+            )
+        }
+
         val notifiedAt = prefs.getLong(KEY_NOTIFIED_AT, 0L)
         val repeat = prefs.getInt(KEY_NOTIFIED_CODE, 0) != remoteCode ||
             System.currentTimeMillis() - notifiedAt > NOTIFY_AGAIN_MILLIS
@@ -231,6 +244,41 @@ object Updater {
 
     fun notificationsEnabled(context: Context): Boolean =
         androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+    /**
+     * The APK must carry the same signing certificate as the installed app. The checksum only
+     * protects against corruption, not against a malicious build served by a compromised server.
+     */
+    private fun signedByUs(context: Context, apk: File): Boolean = try {
+        val pm = context.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+        val installed = pm.getPackageInfo(context.packageName, flags)
+        val archive = pm.getPackageArchiveInfo(apk.absolutePath, flags)
+        if (archive == null) {
+            false
+        } else {
+            fun certs(info: PackageInfo): Set<String> {
+                val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    info.signingInfo?.apkContentsSigners.orEmpty()
+                } else {
+                    @Suppress("DEPRECATION")
+                    info.signatures.orEmpty()
+                }
+                return signatures.map { it.toCharsString() }.toSet()
+            }
+            val ours = certs(installed)
+            val theirs = certs(archive)
+            ours.isNotEmpty() && ours == theirs
+        }
+    } catch (t: Throwable) {
+        Log.w(TAG, "cannot compare signatures", t)
+        false
+    }
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
