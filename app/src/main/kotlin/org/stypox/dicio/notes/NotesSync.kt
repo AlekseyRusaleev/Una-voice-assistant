@@ -16,12 +16,25 @@ object NotesSync {
     private const val BASE_URL = "https://9.247.112.23.sslip.io"
     private const val PREFS = "una_notes_sync"
     private const val KEY_LAST = "last_pushed"
+    private const val KEY_ALLOWED = "server_allowed"
+
+    /** Upload is opt-in: by default notes stay on the phone. */
+    fun isServerAllowed(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ALLOWED, false)
+
+    fun setServerAllowed(context: Context, allowed: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ALLOWED, allowed).apply()
+    }
 
     /** @return number of notes uploaded, or -1 when nothing could be sent. */
     fun push(context: Context, onDone: ((Int) -> Unit)? = null) {
         thread(name = "una-notes-sync") {
             var sent = 0
             try {
+                if (!isServerAllowed(context)) {
+                    onDone?.invoke(-2)
+                    return@thread
+                }
                 val token = org.stypox.dicio.eval.Device.token(context)
                 if (token == null) {
                     onDone?.invoke(-1)

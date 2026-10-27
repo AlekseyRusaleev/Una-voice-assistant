@@ -33,8 +33,8 @@ android {
         applicationId = "ai.una.assistant"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 23
-        versionName = "2.3.0-una"
+        versionCode = 24
+        versionName = "2.4.0-una"
         testInstrumentationRunner = "org.stypox.dicio.CustomTestRunner"
 
         vectorDrawables.useSupportLibrary = true
@@ -137,6 +137,7 @@ dependencies {
 
     // Offline speech recognition engine (bundled as a local AAR, see app/libs)
     implementation(mapOf("name" to "sherpa-onnx", "ext" to "aar"))
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // Dicio own libraries
     implementation(libs.dicio.numbers)
