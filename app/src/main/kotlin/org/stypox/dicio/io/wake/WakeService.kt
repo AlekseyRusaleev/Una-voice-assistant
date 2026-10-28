@@ -99,6 +99,7 @@ class WakeService : Service() {
         if (listening.getAndSet(true)) {
             return START_STICKY // if we were already listening, do nothing more
         }
+        WakeDiag.clear()
 
         if (ContextCompat.checkSelfPermission(this, RECORD_AUDIO) != PERMISSION_GRANTED) {
             stopWithMessage("Could not start WakeService: microphone permission not granted")
@@ -120,7 +121,16 @@ class WakeService : Service() {
                 listenForWakeWord()
                 stopWithMessage() // exit normally, as the user just stopped the service
             } catch (t: Throwable) {
-                stopWithMessage("Cannot continue listening for wake word", t)
+                // the microphone is often busy for a moment right after another app used it
+                Log.w(TAG, "listening failed, retrying once", t)
+                WakeDiag.record("Микрофон недоступен, пробую ещё раз", t)
+                kotlinx.coroutines.delay(3000)
+                try {
+                    listenForWakeWord()
+                    stopWithMessage()
+                } catch (second: Throwable) {
+                    stopWithMessage("Не удалось слушать микрофон", second)
+                }
             }
         }
 
@@ -138,6 +148,10 @@ class WakeService : Service() {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
 
+        if (message.isNotEmpty()) {
+            // the home screen shows this, so a silent stop is no longer silent
+            WakeDiag.record(message, throwable)
+        }
         if (throwable != null) {
             Log.e(TAG, message, throwable)
         } else if (message.isNotEmpty()) {
@@ -568,8 +582,14 @@ class WakeService : Service() {
          */
         fun start(context: Context) {
             Log.d(TAG, "WakeService.start() called from ${Throwable().stackTrace[1]}")
-            val intent = Intent(context, WakeService::class.java)
-            ContextCompat.startForegroundService(context, intent)
+            try {
+                ContextCompat.startForegroundService(
+                    context, Intent(context, WakeService::class.java)
+                )
+            } catch (t: Throwable) {
+                WakeDiag.record("Android не дал запустить службу", t)
+                Log.e(TAG, "cannot start the service", t)
+            }
         }
 
         fun stop(context: Context) {

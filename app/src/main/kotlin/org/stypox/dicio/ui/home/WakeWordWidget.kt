@@ -54,6 +54,7 @@ fun WakeWordWidget(
     wakeState: WakeState?,
     serviceRunning: Boolean,
     recogniserReady: Boolean,
+    stopReason: String?,
     onWakeDownload: () -> Unit,
     onWakeDisable: () -> Unit,
     onWakeEnable: () -> Unit,
@@ -78,8 +79,15 @@ fun WakeWordWidget(
         if (!serviceRunning) {
             UnaStatusCard(
                 title = "Служба не слушает микрофон",
-                detail = "Слово-триггер включён, но служба не работает. Обычно помогает " +
-                    "перезапуск приложения или снятие ограничений батареи.",
+                detail = buildString {
+                    append("Слово-триггер включён, но служба не работает.")
+                    if (stopReason != null) {
+                        append("\nПричина: ")
+                        append(stopReason)
+                    } else {
+                        append(" Попробуйте нажать «Запустить» ещё раз.")
+                    }
+                },
                 action = "Запустить",
                 onAction = onWakeEnable,
             )

@@ -50,13 +50,33 @@ class VoskWakeDevice(
     private var detectedCommand: String? = null
     private var pcmBuffer = ByteArray(0)
 
-    private fun isModelPresent() = File(modelDir, "ivector").isDirectory
+    /**
+     * A truncated unpack (interrupted download) leaves a directory that looks fine but fails to load
+     * later, and the service then stops without explanation. The Russian model is ~45 MB, so a much
+     * smaller folder is treated as missing and downloaded again.
+     */
+    private fun isModelPresent(): Boolean {
+        if (!File(modelDir, "ivector").isDirectory) {
+            return false
+        }
+        var total = 0L
+        var files = 0
+        modelDir.walkTopDown().forEach { file ->
+            if (file.isFile) {
+                total += file.length()
+                files++
+            }
+        }
+        return files >= 5 && total > MIN_MODEL_BYTES
+    }
 
     override fun download() {
         if (isModelPresent()) {
             _state.value = WakeState.NotLoaded
             return
         }
+        // drop whatever is left of a previous attempt
+        modelDir.deleteRecursively()
 
         _state.value = WakeState.Downloading(Progress.UNKNOWN)
         scope.launch {
@@ -220,6 +240,8 @@ class VoskWakeDevice(
 
         /** Accepted spellings of the name: short words get clipped, and false positives are
          *  filtered later by the strict check. */
+        private const val MIN_MODEL_BYTES = 30L * 1024 * 1024
+
         private val WAKE_WORDS = setOf("юна", "юнна", "уна", "юнона")
 
         /**

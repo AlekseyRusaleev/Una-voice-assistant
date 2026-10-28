@@ -39,6 +39,7 @@ import org.stypox.dicio.eval.SkillEvaluator
 import org.stypox.dicio.io.input.InputEvent
 import org.stypox.dicio.io.input.SttState
 import org.stypox.dicio.io.input.gigaam.GigaAmModel
+import org.stypox.dicio.io.wake.WakeDiag
 import org.stypox.dicio.io.wake.WakeService
 import org.stypox.dicio.io.wake.WakeState
 import org.stypox.dicio.ui.nav.SearchTopAppBar
@@ -97,10 +98,12 @@ fun HomeScreen(
     val wakeState = viewModel.wakeDevice.state.collectAsState()
     var serviceRunning by remember { mutableStateOf(WakeService.isRunning()) }
     var recogniserReady by remember { mutableStateOf(GigaAmModel.isReady(context)) }
+    var stopReason by remember { mutableStateOf(WakeDiag.recent()) }
     LaunchedEffect(Unit) {
         while (true) {
             serviceRunning = WakeService.isRunning()
             recogniserReady = GigaAmModel.isReady(context)
+            stopReason = WakeDiag.recent()
             delay(2000)
         }
     }
@@ -116,6 +119,7 @@ fun HomeScreen(
         wakeState = wakeState.value,
         serviceRunning = serviceRunning,
         recogniserReady = recogniserReady,
+        stopReason = stopReason,
         onWakeDownload = {
             viewModel.wakeDevice.download()
         },
@@ -144,6 +148,7 @@ fun HomeScreen(
     wakeState: WakeState?,
     serviceRunning: Boolean,
     recogniserReady: Boolean,
+    stopReason: String?,
     onWakeDownload: () -> Unit,
     onWakeDisable: () -> Unit,
     onWakeEnable: () -> Unit,
@@ -182,6 +187,7 @@ fun HomeScreen(
                 wakeState = wakeState,
                 serviceRunning = serviceRunning,
                 recogniserReady = recogniserReady,
+                stopReason = stopReason,
                 onWakeDownload = onWakeDownload,
                 onWakeDisable = onWakeDisable,
                 onWakeEnable = onWakeEnable,
@@ -219,6 +225,7 @@ private fun HomeScreenPreview(@PreviewParameter(InteractionLogPreviews::class) i
             wakeState = null,
             serviceRunning = false,
             recogniserReady = false,
+            stopReason = null,
             onWakeDownload = {},
             onWakeDisable = {},
             onWakeEnable = {},
