@@ -535,102 +535,138 @@ class WakeService : Service() {
         WakeStats.onTrigger(this)
         Log.d(TAG, "Wake word detected")
 
+        // The detector only reports the name once the phrase has ended, so the command that came
+        // with it is behind us, not ahead: it lives in the tail buffer. Recognising that buffer
+        // gives the whole phrase at once, and the assistant can act without asking to repeat.
+        val tail = tailAudio()
+        val tailText = if (GigaAmModel.isReady(this)) {
+            runCatching {
+                GigaAmEngine.recognize(this, tail).lowercase().replace('ё', 'е')
+            }.getOrDefault("")
+        } else {
+            ""
+        }
+        val (nameHeard, tailCommand) = splitWakePhrase(tailText)
         val confidence = wakeDevice.takeDetectedConfidence()
-        // a very confident decode is acted on immediately; the expensive re-check is only needed
-        // when the decoder itself is unsure, which is also what kept the assistant feeling slow
-        val needsCheck = confidence < CONFIDENT_ENOUGH
-        if (WakeStats.isStrict(this) && needsCheck && !verifyWithGigaAm()) {
+
+        // false triggers: the name was not in the recognised speech and the decoder was unsure
+        if (WakeStats.isStrict(this) && !nameHeard && confidence < CONFIDENT_ENOUGH) {
             WakeStats.onRejected(this)
             Journal.record(this, "(ложное срабатывание)", "rejected")
-            Uplink.sendAudio(this, tailAudio(), "rejected")
-            Log.d(TAG, "strict check rejected the trigger")
+            Uplink.sendAudio(this, tail, "rejected")
+            Log.d(TAG, "rejected: no name in \"$tailText\"")
             return
         }
 
-        // a confirmed wake-up is the positive example a wake word model needs to be trained on;
-        // only sent when the strict check actually confirmed the name
         if (WakeStats.isStrict(this)) {
-            Uplink.sendAudio(this, tailAudio(), "positive")
+            Uplink.sendAudio(this, tail, "positive")
         }
 
+        // the whole command was in the same phrase, so run it immediately
+        if (tailCommand.isNotBlank()) {
+            WakeStats.onCommand(this)
+            Log.i(TAG, "command from the same phrase: $tailCommand")
+            skillEvaluator.processInputEvent(InputEvent.Final(listOf(tailCommand to 1.0f)))
+            scheduleSttRelease()
+            return
+        }
+
+        // the name came alone: let the user finish, then listen for the command
+        startListeningForCommand(ar)
+    }
+
+    /** @return whether the name was heard, and whatever followed it in the same phrase. */
+    private fun splitWakePhrase(text: String): Pair<Boolean, String> {
+        if (text.isBlank()) {
+            return false to ""
+        }
+        for (word in WAKE_WORDS) {
+            val index = text.indexOf(word)
+            if (index >= 0) {
+                val rest = text.substring(index + word.length)
+                    .trim()
+                    .trimStart(',', '.', '!', '?', '—', '-', ':', ' ')
+                    .trim()
+                return true to rest
+            }
+        }
+        return false to ""
+    }
+
+    /**
+     * Android 10+ does not allow starting an activity from the background, so a full-screen
+     * notification is posted instead: the system then opens the assistant itself.
+     */
+    private fun createForegroundNotificationForTrigger() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = ACTION_WAKE_WORD
+            flags = FLAG_ACTIVITY_NEW_TASK
+        }
+
+        val channel = NotificationChannel(
+            TRIGGERED_NOTIFICATION_CHANNEL_ID,
+            getString(R.string.wake_service_triggered_notification),
+            NotificationManager.IMPORTANCE_HIGH,
+        )
+        channel.description = getString(R.string.wake_service_triggered_notification_summary)
+        notificationManager.createNotificationChannel(channel)
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val notification = NotificationCompat.Builder(this, TRIGGERED_NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_hearing_white)
+            .setContentTitle(getString(R.string.wake_service_triggered_notification))
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText(getString(R.string.wake_service_triggered_notification_summary))
+            )
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setFullScreenIntent(pendingIntent, true)
+            .build()
+
+        notificationManager.cancel(TRIGGERED_NOTIFICATION_ID)
+        notificationManager.notify(TRIGGERED_NOTIFICATION_ID, notification)
+    }
+
+    /** Opens the assistant and records the command that follows the name. */
+    private fun startListeningForCommand(ar: AudioRecord) {
         val intent = Intent(this, MainActivity::class.java)
         intent.setAction(ACTION_WAKE_WORD)
         intent.setFlags(FLAG_ACTIVITY_NEW_TASK)
 
-        // The wake device decodes the command with its own tiny grammar, so any word missing from
-        // that grammar simply disappears: "включи фонарик" arrives as "включи" and then plays
-        // music. The accurate model is therefore always tried first; the inline decode is only a
-        // fallback when it heard nothing at all.
         val inlineCommand = wakeDevice.takeDetectedCommand()
-        // with the VAD detector the whole phrase is already recognised, so a second pass would only
-        // add a second of latency and another model run
         val transcribed = if (inlineCommand.isNullOrBlank()) transcribeWithGigaAm(ar) else false
         if (!transcribed && inlineCommand.isNullOrBlank()) {
-            // Start listening and pass STT events to the skill evaluator.
-            // Note that this works even if the MainActivity is opened later!
             sttInputDevice.tryLoad(skillEvaluator::processInputEvent)
-
-            // Unload the STT after a while because it would be using RAM uselessly
-            handler.removeCallbacks(releaseSttResourcesRunnable)
-            handler.postDelayed(releaseSttResourcesRunnable, RELEASE_STT_RESOURCES_MILLIS)
+            scheduleSttRelease()
         } else if (!transcribed) {
-            // GigaAM heard nothing: fall back to the coarse inline decode, but only when it is a
-            // real phrase, because a single stray word is usually a decoding artefact
             val inline = inlineCommand ?: ""
             if (inline.isNotEmpty()) {
                 WakeStats.onCommand(this)
                 Log.d(TAG, "Running the inline command: $inline")
                 skillEvaluator.processInputEvent(InputEvent.Final(listOf(inline to 1.0f)))
             }
-
-            // A skill may ask a follow-up question (e.g. "Call mom?" before dialing), so keep
-            // listening — but only after a short delay, otherwise the tail of the same phrase
-            // would be executed a second time.
             handler.postDelayed({
                 sttInputDevice.tryLoad(skillEvaluator::processInputEvent)
-                handler.removeCallbacks(releaseSttResourcesRunnable)
-                handler.postDelayed(releaseSttResourcesRunnable, RELEASE_STT_RESOURCES_MILLIS)
+                scheduleSttRelease()
             }, INLINE_FOLLOW_UP_DELAY_MILLIS)
         }
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || MainActivity.isInForeground > 0) {
-            // start the activity directly on versions prior to Android 10,
-            // or if the MainActivity is already running in the foreground
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || MainActivity.isCreated > 0) {
             startActivity(intent)
-
         } else {
-            // Android 10+ does not allow starting activities from the background,
-            // so show a full-screen notification instead, which does actually result in starting
-            // the activity from the background if the phone is off and Do Not Disturb is not active
-            // Maybe we could also use the "Display over other apps" permission?
-
-            val channel = NotificationChannel(
-                TRIGGERED_NOTIFICATION_CHANNEL_ID,
-                getString(R.string.wake_service_triggered_notification),
-                NotificationManager.IMPORTANCE_HIGH
-            )
-            channel.description = getString(R.string.wake_service_triggered_notification_summary)
-            notificationManager.createNotificationChannel(channel)
-
-            val pendingIntent = PendingIntent.getActivity(
-                this,
-                0,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-
-            val notification = NotificationCompat.Builder(this, TRIGGERED_NOTIFICATION_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_hearing_white)
-                .setContentTitle(getString(R.string.wake_service_triggered_notification))
-                .setStyle(NotificationCompat.BigTextStyle().bigText(
-                    getString(R.string.wake_service_triggered_notification_summary)))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setFullScreenIntent(pendingIntent, true)
-                .build()
-
-            notificationManager.cancel(TRIGGERED_NOTIFICATION_ID)
-            notificationManager.notify(TRIGGERED_NOTIFICATION_ID, notification)
+            createForegroundNotificationForTrigger()
         }
+    }
+
+    private fun scheduleSttRelease() {
+        handler.removeCallbacks(releaseSttResourcesRunnable)
+        handler.postDelayed(releaseSttResourcesRunnable, RELEASE_STT_RESOURCES_MILLIS)
     }
 
     companion object {
@@ -755,6 +791,9 @@ class WakeService : Service() {
         /** Journal upload and updater tick: the updater itself only acts every few hours. */
         private const val MAINTENANCE_INTERVAL_MILLIS = 30L * 60 * 1000
 
+        /** Spellings of the name the recogniser may produce. */
+        private val WAKE_WORDS = listOf("юна", "юнна", "уна", "юнона")
+
         /** At least 0.3 s of audio is needed to check whether the name was really spoken. */
         private const val MIN_TAIL_SAMPLES = 4800
 
@@ -784,7 +823,7 @@ class WakeService : Service() {
         private val SILENCE_FRAME = ShortArray(1280)
 
         /** ~2.2 s of audio kept for the strict wake word check. */
-        private const val WAKE_TAIL_FRAMES = 28
+        private const val WAKE_TAIL_FRAMES = 40 // ~3.2 s, enough for "Юна, включи музыку"
     }
 }
 
