@@ -10,6 +10,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaSessionManager
@@ -45,10 +46,18 @@ object Extras {
         """(?:запиши|записать|добавь|сохрани)(?:\s+в\s+заметки)?\s+(.+)""", RegexOption.IGNORE_CASE
     )
     private val NOTE_DELETE = Regex("""удали\s+заметку\s+(.+)""", RegexOption.IGNORE_CASE)
-    private val ALARM = Regex("""будильник\s+на\s+(\d{1,2})(?:[:.](\d{2}))?""", RegexOption.IGNORE_CASE)
-    private val TIMER = Regex("""таймер\s+на\s+(.+)""", RegexOption.IGNORE_CASE)
+    private val ALARM = Regex("""будильник\s+(?:на\s+)?([\dа-я]+)(?:[:.](\d{2}))?""", RegexOption.IGNORE_CASE)
+    private val TIMER = Regex("""таймер\s*(?:на\s+)?(.+)""", RegexOption.IGNORE_CASE)
+    private val FLASHLIGHT = Regex(
+        """(включи|вруби|зажги|включить)\s+(фонарик|фонарь|свет|подсветк\w*)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val FLASHLIGHT_OFF = Regex(
+        """(выключи|выруби|погаси|отключи|выключить)\s+(фонарик|фонарь|свет|подсветк\w*)""",
+        RegexOption.IGNORE_CASE,
+    )
     private val YOUTUBE = Regex(
-        """(?:включи|найди|поищи|открой)\s+(?:на\s+)?ютуб\w*\s+(.+)""", RegexOption.IGNORE_CASE
+        """ютуб\w*\s+(?:включи\s+)?(.+)""", RegexOption.IGNORE_CASE
     )
     private val NUMBER = Regex("""[\d\s\-()]{5,}""")
     private val CALENDAR = Regex(
@@ -63,6 +72,16 @@ object Extras {
 
     /** @return true when the phrase was handled here. */
     fun handle(context: Context, text: String, utterance: String): Boolean {
+        // ---- flashlight: "включи фонарик" must never be read as "turn the music on"
+        if (FLASHLIGHT.containsMatchIn(text)) {
+            setTorch(context, true)
+            return true
+        }
+        if (FLASHLIGHT_OFF.containsMatchIn(text)) {
+            setTorch(context, false)
+            return true
+        }
+
         // ---- calendar first: the notes handler below also matches "запиши ..."
         CALENDAR.find(text)?.let { match ->
             val rest = match.groupValues[1].trim()
@@ -140,7 +159,8 @@ object Extras {
 
         // ---- alarm clock
         ALARM.find(text)?.let { match ->
-            val hour = match.groupValues[1].toIntOrNull() ?: return@let
+            val rawHour = match.groupValues[1]
+            val hour = rawHour.toIntOrNull() ?: RemoteConfig.current.numberWords[rawHour] ?: return@let
             val minute = match.groupValues[2].toIntOrNull() ?: 0
             if (hour in 0..23 && minute in 0..59) {
                 setAlarm(context, hour, minute)
@@ -504,6 +524,27 @@ object Extras {
         val match = NUMBER.find(text) ?: return null
         val digits = match.value.filter { it.isDigit() }
         return if (digits.length >= 5) digits else null
+    }
+
+    /** Switches the camera flash on or off; needs the camera permission. */
+    private fun setTorch(context: Context, on: Boolean) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notify(context, "Фонарик", "Нужен доступ к камере — включите его в «Разрешениях»")
+            return
+        }
+        try {
+            val manager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+                ?: throw IllegalStateException("нет камеры")
+            val cameraId = manager.cameraIdList.firstOrNull()
+                ?: throw IllegalStateException("камера не найдена")
+            manager.setTorchMode(cameraId, on)
+            notify(context, "Фонарик", if (on) "Включён" else "Выключен")
+        } catch (t: Throwable) {
+            Log.w(TAG, "cannot switch the torch", t)
+            notify(context, "Фонарик", "Не получилось: ${t.message ?: "ошибка"}")
+        }
     }
 
     fun notify(context: Context, title: String, text: String) {

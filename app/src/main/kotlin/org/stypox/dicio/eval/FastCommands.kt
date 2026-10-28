@@ -38,7 +38,8 @@ object FastCommands {
     )
 
     private val CALL_FILLER = listOf(
-        "мне", "пожалуйста", "пожалуй", "срочно", "номер", "контакту", "контакт", "телефону", "телефон",
+        "мне", "пожалуйста", "пожалуй", "срочно", "номер", "контакту", "контакт", "телефону",
+        "телефон", "сейчас", "быстро", "сразу", "это", "его", "ее", "их", "человека", "абоненту",
     )
 
     /** @return `true` if the utterance was fully handled here and must not reach the skills. */
@@ -74,7 +75,7 @@ object FastCommands {
             return adjustVolume(context, AudioManager.ADJUST_LOWER)
         }
 
-        // 4. Yandex Music sections
+        // 4. Yandex Music sections: both the action and the section word must be present
         if (config.yandexOpen.any { text.contains(it) }) {
             if (config.yandexWave.any { text.contains(it) }) {
                 return openYandexMusic(context, "wave")
@@ -84,14 +85,26 @@ object FastCommands {
             }
         }
 
-        // 5. media control: "previous" first, because "переключи на предыдущий" contains both
+        // 5. media control: "previous" first, because "переключи на предыдущий" contains both.
+        // Verbs like "включи" or "выключи" are too common ("включи фонарик", "поставь таймер"),
+        // so play/pause only fire when the phrase is really about music: it names a track, or it
+        // consists of the bare verb alone.
         val hasMusicContext = config.musicContext.any { text.contains(it) }
+        val words = text.split(' ').filter { it.isNotBlank() }
+        val bareCommand = words.size <= 3
         val mediaKey = when {
-            config.previous.any { text.contains(it) } -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
-            config.next.any { text.contains(it) } -> KeyEvent.KEYCODE_MEDIA_NEXT
-            config.pause.any { text.contains(it) } -> KeyEvent.KEYCODE_MEDIA_PAUSE
-            config.play.any { text.contains(it) } && (hasMusicContext || text.length <= 24) ->
+            config.previous.any { text.contains(it) } && (hasMusicContext || bareCommand) ->
+                KeyEvent.KEYCODE_MEDIA_PREVIOUS
+
+            config.next.any { text.contains(it) } && (hasMusicContext || bareCommand) ->
+                KeyEvent.KEYCODE_MEDIA_NEXT
+
+            config.pause.any { text.contains(it) } && (hasMusicContext || bareCommand) ->
+                KeyEvent.KEYCODE_MEDIA_PAUSE
+
+            config.play.any { text.contains(it) } && (hasMusicContext || bareCommand) ->
                 KeyEvent.KEYCODE_MEDIA_PLAY
+
             else -> null
         }
         if (mediaKey != null) {
@@ -126,7 +139,16 @@ object FastCommands {
             return false
         }
 
-        val number = findNumber(context, name) ?: return false
+        val number = findNumber(context, name)
+        if (number == null) {
+            // falling through used to hand the phrase to the skills, which opened a contact search
+            // and rang somebody else; saying it plainly is better than dialling the wrong person
+            Extras.notify(
+                context, "Звонок",
+                "Не нашёл контакт «$name». Скажите: «позвони» и имя так, как оно записано в книге",
+            )
+            return true
+        }
         return dial(context, number)
     }
 
@@ -139,7 +161,10 @@ object FastCommands {
      * endings ("маме" → "мама", "юле" → "юлия").
      */
     private fun findNumber(context: Context, spoken: String): String? {
-        val tokens = spoken.split(' ').filter { it.length >= 3 }.take(3)
+        val tokens = spoken.split(' ')
+            .map { it.trim() }
+            .filter { it.length >= 3 && it !in CALL_FILLER }
+            .take(3)
         if (tokens.isEmpty()) {
             return null
         }
@@ -169,8 +194,12 @@ object FastCommands {
                         continue
                     }
 
+                    // every spoken word must match something in the name, otherwise "позвони
+                    // маме пожалуйста" could land on a contact containing "пожалуйста"
                     var score = 0
+                    var matchedAll = true
                     for (tokenStem in tokenStems) {
+                        var bestForToken = 0
                         for (word in words) {
                             val wordStem = stem(word)
                             val value = when {
@@ -178,12 +207,17 @@ object FastCommands {
                                 wordStem.startsWith(tokenStem) || tokenStem.startsWith(wordStem) -> 3
                                 else -> 0
                             }
-                            if (value > score) {
-                                score = value
+                            if (value > bestForToken) {
+                                bestForToken = value
                             }
                         }
+                        if (bestForToken == 0) {
+                            matchedAll = false
+                            break
+                        }
+                        score += bestForToken
                     }
-                    if (score < 3) {
+                    if (!matchedAll) {
                         continue
                     }
                     // prefer the shorter name on a tie: "Юлия" over "Юлия ЦПСС"
