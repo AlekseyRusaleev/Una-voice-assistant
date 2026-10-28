@@ -53,6 +53,7 @@ else
 fun WakeWordWidget(
     wakeState: WakeState?,
     serviceRunning: Boolean,
+    hearing: Boolean,
     recogniserReady: Boolean,
     stopReason: String?,
     onWakeDownload: () -> Unit,
@@ -76,6 +77,16 @@ fun WakeWordWidget(
     if (wakeState is WakeState.Loaded || wakeState is WakeState.Loading ||
         wakeState is WakeState.NotLoaded
     ) {
+        if (serviceRunning && !hearing) {
+            UnaStatusCard(
+                title = "Служба работает, но микрофон молчит",
+                detail = "Прослушивание запущено, однако звук не поступает. Обычно микрофон " +
+                    "занят другим приложением или системой. Нажмите «Перезапустить».",
+                action = "Перезапустить",
+                onAction = onWakeEnable,
+            )
+            return
+        }
         if (!serviceRunning) {
             UnaStatusCard(
                 title = "Служба не слушает микрофон",

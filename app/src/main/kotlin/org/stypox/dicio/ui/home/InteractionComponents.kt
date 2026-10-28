@@ -65,6 +65,7 @@ fun InteractionList(
     onConfirmedQuestionClick: (String) -> Unit,
     wakeState: WakeState?,
     serviceRunning: Boolean,
+    hearing: Boolean,
     recogniserReady: Boolean,
     stopReason: String?,
     onWakeDownload: () -> Unit,
@@ -100,6 +101,7 @@ fun InteractionList(
             WakeWordWidget(
                 wakeState = wakeState,
                 serviceRunning = serviceRunning,
+                hearing = hearing,
                 recogniserReady = recogniserReady,
                 stopReason = stopReason,
                 onWakeDownload = onWakeDownload,
@@ -204,6 +206,7 @@ fun InteractionListPreview(
             interactionLog = interactionLog,
             wakeState = wakeStatesPreviews[interactionLog.hashCode().absoluteValue % wakeStatesPreviews.size],
             serviceRunning = true,
+            hearing = true,
             recogniserReady = true,
             stopReason = null,
             onWakeDownload = {},

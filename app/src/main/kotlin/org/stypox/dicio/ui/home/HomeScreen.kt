@@ -99,11 +99,13 @@ fun HomeScreen(
     var serviceRunning by remember { mutableStateOf(WakeService.isRunning()) }
     var recogniserReady by remember { mutableStateOf(GigaAmModel.isReady(context)) }
     var stopReason by remember { mutableStateOf(WakeDiag.recent()) }
+    var hearing by remember { mutableStateOf(WakeService.isHearing()) }
     LaunchedEffect(Unit) {
         while (true) {
             serviceRunning = WakeService.isRunning()
             recogniserReady = GigaAmModel.isReady(context)
             stopReason = WakeDiag.recent()
+            hearing = WakeService.isHearing()
             delay(2000)
         }
     }
@@ -118,6 +120,7 @@ fun HomeScreen(
         },
         wakeState = wakeState.value,
         serviceRunning = serviceRunning,
+        hearing = hearing,
         recogniserReady = recogniserReady,
         stopReason = stopReason,
         onWakeDownload = {
@@ -147,6 +150,7 @@ fun HomeScreen(
     onSttClick: () -> Unit,
     wakeState: WakeState?,
     serviceRunning: Boolean,
+    hearing: Boolean,
     recogniserReady: Boolean,
     stopReason: String?,
     onWakeDownload: () -> Unit,
@@ -186,6 +190,7 @@ fun HomeScreen(
                 onConfirmedQuestionClick = { searchString = it },
                 wakeState = wakeState,
                 serviceRunning = serviceRunning,
+                hearing = hearing,
                 recogniserReady = recogniserReady,
                 stopReason = stopReason,
                 onWakeDownload = onWakeDownload,
@@ -224,6 +229,7 @@ private fun HomeScreenPreview(@PreviewParameter(InteractionLogPreviews::class) i
             onSttClick = { i += 1 },
             wakeState = null,
             serviceRunning = false,
+            hearing = false,
             recogniserReady = false,
             stopReason = null,
             onWakeDownload = {},

@@ -96,6 +96,7 @@ class WakeService : Service() {
             return START_NOT_STICKY
         }
 
+        alive.set(true)
         if (listening.getAndSet(true)) {
             return START_STICKY // if we were already listening, do nothing more
         }
@@ -138,6 +139,7 @@ class WakeService : Service() {
     }
 
     override fun onDestroy() {
+        alive.set(false)
         listening.set(false)
         job.cancel()
         wakeDevice.reinitializeToReleaseResources()
@@ -145,6 +147,7 @@ class WakeService : Service() {
     }
 
     private fun stopWithMessage(message: String = "", throwable: Throwable? = null) {
+        alive.set(false)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
 
@@ -216,14 +219,22 @@ class WakeService : Service() {
         var noiseFloor = 0.0
         var skippedStreakMillis = 0L
         val skipSilence = WakeStats.isSkipSilence(this)
+        var readErrors = 0
 
         try {
             ar.startRecording()
             while (listening.get()) {
                 val read = ar.read(frame, 0, frameSize)
                 if (read <= 0) {
+                    // a dead microphone used to spin here silently, with the service still "alive"
+                    readErrors++
+                    if (readErrors > MAX_READ_ERRORS) {
+                        throw IllegalStateException("микрофон перестал отдавать данные")
+                    }
+                    Thread.sleep(20)
                     continue
                 }
+                readErrors = 0
                 rememberFrame(frame, read)
 
                 val level = rms(frame, read)
@@ -601,8 +612,14 @@ class WakeService : Service() {
             }
         }
 
-        // Consider the service running if it processed any audio data within the past half second.
-        fun isRunning(): Boolean = lastHeard.get()?.isAfter(Instant.now().minusMillis(500)) == true
+        /** True while the service object is alive, regardless of what the microphone does. */
+        fun isRunning(): Boolean = alive.get()
+
+        /** True when audio frames actually arrived within the last two seconds. */
+        fun isHearing(): Boolean =
+            lastHeard.get()?.isAfter(Instant.now().minusMillis(2000)) == true
+
+        private val alive = AtomicBoolean(false)
 
         /**
          * On Android 10+ cancels any notification telling the user that the Dicio wake word was
@@ -645,6 +662,9 @@ class WakeService : Service() {
         /** How often the running service looks for a new version. */
         /** Journal upload and updater tick: the updater itself only acts every few hours. */
         private const val MAINTENANCE_INTERVAL_MILLIS = 30L * 60 * 1000
+
+        /** Consecutive empty microphone reads after which the service gives up and retries. */
+        private const val MAX_READ_ERRORS = 250
 
         /** Speaking level, relative to the measured noise floor of the room. */
         private const val GATE_FACTOR = 2.0
