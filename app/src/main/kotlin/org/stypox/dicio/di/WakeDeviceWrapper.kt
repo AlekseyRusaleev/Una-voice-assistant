@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import org.stypox.dicio.io.wake.WakeDevice
 import org.stypox.dicio.io.wake.WakeState
-import org.stypox.dicio.io.wake.vad.VadGigaAmWakeDevice
+import org.stypox.dicio.io.wake.segment.SegmentGigaAmWakeDevice
 import org.stypox.dicio.io.wake.vosk.VoskWakeDevice
 import org.stypox.dicio.settings.datastore.UserSettings
 import org.stypox.dicio.settings.datastore.WakeDevice.UNRECOGNIZED
@@ -130,14 +130,9 @@ class WakeDeviceWrapperImpl(
     private fun buildInputDevice(setting: DataStoreWakeDevice): WakeDevice? {
         return when (setting) {
             UNRECOGNIZED,
-            WAKE_DEVICE_UNSET,
+            WAKE_DEVICE_UNSET -> SegmentGigaAmWakeDevice(appContext)
             WAKE_DEVICE_OWW -> VoskWakeDevice(appContext, okHttpClient)
-            WAKE_DEVICE_VAD -> if (org.stypox.dicio.util.CrashGuard.safeMode(appContext)) {
-                // the new detector crashed the app twice: fall back until the user picks it again
-                VoskWakeDevice(appContext, okHttpClient)
-            } else {
-                VadGigaAmWakeDevice(appContext, okHttpClient)
-            }
+            WAKE_DEVICE_VAD -> SegmentGigaAmWakeDevice(appContext)
             WAKE_DEVICE_NOTHING -> null
         }
     }

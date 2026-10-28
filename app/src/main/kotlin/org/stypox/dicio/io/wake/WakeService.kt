@@ -538,6 +538,20 @@ class WakeService : Service() {
         // The detector only reports the name once the phrase has ended, so the command that came
         // with it is behind us, not ahead: it lives in the tail buffer. Recognising that buffer
         // gives the whole phrase at once, and the assistant can act without asking to repeat.
+        // a detector that recognises whole phrases already knows the command: use it as is, the
+        // tail buffer only holds the last seconds and may cut a long phrase
+        val deviceCommand = wakeDevice.takeDetectedCommand()
+        if (!deviceCommand.isNullOrBlank()) {
+            WakeStats.onCommand(this)
+            Log.i(TAG, "command from the detector: $deviceCommand")
+            skillEvaluator.processInputEvent(InputEvent.Final(listOf(deviceCommand to 1.0f)))
+            if (WakeStats.isStrict(this)) {
+                Uplink.sendAudio(this, tailAudio(), "positive")
+            }
+            scheduleSttRelease()
+            return
+        }
+
         val tail = tailAudio()
         val tailText = if (GigaAmModel.isReady(this)) {
             runCatching {

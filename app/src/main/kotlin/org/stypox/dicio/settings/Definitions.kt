@@ -131,9 +131,9 @@ fun wakeDevice() = ListSetting(
         ),
         ListSetting.Value(
             value = WakeDevice.WAKE_DEVICE_VAD,
-            name = "Точный детектор (VAD + GigaAM)",
-            description = "Слушает только речь и распознаёт фразу целиком: меньше ложных, " +
-                "но отклик на полсекунды дольше",
+            name = "Речь → GigaAM (точный, по умолчанию)",
+            description = "Ловит фразу по наличию речи и распознаёт её целиком: имя ищется " +
+                "в тексте, поэтому и понимает лучше, и фон не путает",
         ),
         ListSetting.Value(
             value = WakeDevice.WAKE_DEVICE_NOTHING,
