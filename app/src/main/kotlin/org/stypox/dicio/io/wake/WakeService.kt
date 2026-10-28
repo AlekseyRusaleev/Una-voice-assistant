@@ -236,6 +236,7 @@ class WakeService : Service() {
         val skipSilence = WakeStats.isSkipSilence(this)
         var readErrors = 0
         var audioFlowing = false
+        var frameFaults = 0
 
         try {
             ar.startRecording()
@@ -282,22 +283,34 @@ class WakeService : Service() {
                 if (gateOpen) {
                     skippedStreakMillis = 0
                 }
-                val detected = if (gateOpen || speechInProgress) {
-                    // the name may start quietly: replay the buffered frames before this one
-                    var fired = false
-                    while (preroll.isNotEmpty()) {
-                        fired = wakeDevice.processFrame(preroll.removeFirst()) || fired
+                // one bad frame used to take the whole service down; now it is reported and skipped
+                val detected = try {
+                    if (gateOpen || speechInProgress) {
+                        // the name may start quietly: replay the buffered frames before this one
+                        var fired = false
+                        while (preroll.isNotEmpty()) {
+                            fired = wakeDevice.processFrame(preroll.removeFirst()) || fired
+                        }
+                        wakeDevice.processFrame(frame.copyOf(read)) || fired
+                    } else {
+                        // silence: keep a few frames for the case the name starts quietly and skip
+                        // decoding altogether, which is where most of the always-on CPU went
+                        preroll.addLast(frame.copyOf(read))
+                        while (preroll.size > PREROLL_FRAMES) {
+                            preroll.removeFirst()
+                        }
+                        WakeStats.onSkippedFrame()
+                        skippedStreakMillis += FRAME_MILLIS
+                        false
                     }
-                    wakeDevice.processFrame(frame.copyOf(read)) || fired
-                } else {
-                    // silence: keep a few frames for the case the name starts quietly and skip
-                    // decoding altogether, which is where most of the always-on CPU went
-                    preroll.addLast(frame.copyOf(read))
-                    while (preroll.size > PREROLL_FRAMES) {
-                        preroll.removeFirst()
+                } catch (t: Throwable) {
+                    if (frameFaults++ < 3) {
+                        diag(
+                            "frame failed: ${t.javaClass.simpleName}: ${t.message} | " +
+                                t.stackTraceToString().lineSequence().take(5)
+                                    .joinToString(" <- ")
+                        )
                     }
-                    WakeStats.onSkippedFrame()
-                    skippedStreakMillis += FRAME_MILLIS
                     false
                 }
                 WakeStats.onFrame()
