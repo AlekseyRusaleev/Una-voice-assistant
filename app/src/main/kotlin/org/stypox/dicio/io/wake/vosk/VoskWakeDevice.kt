@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import org.json.JSONObject
+import org.stypox.dicio.eval.RemoteConfig
 import org.stypox.dicio.io.wake.WakeDevice
 import org.stypox.dicio.io.wake.WakeState
 import org.stypox.dicio.io.wake.WakeStats
@@ -221,7 +222,7 @@ class VoskWakeDevice(
     }
 
     private fun newRecognizer(): Recognizer =
-        Recognizer(model ?: throw IllegalStateException("model is not loaded"), SAMPLE_RATE, GRAMMAR)
+        Recognizer(model ?: throw IllegalStateException("model is not loaded"), SAMPLE_RATE, grammar())
             .apply { setWords(true) }
 
     override fun frameSize(): Int = FRAME_SIZE
@@ -262,20 +263,16 @@ class VoskWakeDevice(
          * The decoder is limited to the wake word plus the words our commands are made of, so that
          * a phrase like "юна следующий трек" is decoded in full. Everything else becomes [unk].
          */
-        private val GRAMMAR = """
-            ["юна","юнна","уна","юнона","слушай","слушайте","эй","привет","окей","ок","алло",
-             "следующий","следующая","трек","песня","песню","музыка","музыку","плеер",
-             "пауза","стоп","продолжи","продолжить","играй","включи","включить","выключи",
-             "переключи","переключить","дальше","назад","предыдущий","предыдущая","прошлый",
-             "верни","вернуть","пропусти","пропустить","промотай","поставь","поставить",
-             "останови","остановить","приостанови","приостановить","воспроизведение","композиция",
-             "громче","тише","громкость","звук","сделай","сделать","установи","установить",
-             "мою","моя","волну","волна","нравится","любимые","треки",
-             "ноль","один","одну","два","две","три","четыре","пять","шесть","семь","восемь",
-             "девять","десять","одиннадцать","двенадцать","тринадцать","четырнадцать","пятнадцать",
-             "позвони","позвонить","таймер","напомни","заметка","запиши","погода","время",
-             "который","час","[unk]"]
-        """.replace(Regex("\\s+"), " ").trim()
+        private fun grammar(): String {
+            val words = linkedSetOf(
+                "юна", "юнна", "уна", "юнона",
+                "слушай", "слушайте", "эй", "привет", "окей", "ок", "алло",
+            )
+            words.addAll(RemoteConfig.current.grammar)
+            words.addAll(RemoteConfig.current.wakeWord.split(' '))
+            return words.filter { it.isNotBlank() }
+                .joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
+        }
 
         private const val MODEL_URL =
             "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip"
