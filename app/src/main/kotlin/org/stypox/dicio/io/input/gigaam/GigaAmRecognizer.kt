@@ -73,6 +73,11 @@ class GigaAmRecognizer(private val modelDir: File) {
      */
     @Synchronized
     fun recognize(samples: ShortArray): String {
+        // sherpa-onnx divides by the number of feature frames: an empty or tiny buffer used to blow
+        // up with ArithmeticException instead of simply returning nothing
+        if (samples.size < MIN_SAMPLES) {
+            return ""
+        }
         val engine = recognizer ?: if (load()) recognizer else null
         if (engine == null) {
             return ""
@@ -102,6 +107,9 @@ class GigaAmRecognizer(private val modelDir: File) {
     companion object {
         private const val TAG = "GigaAmRecognizer"
         private const val SAMPLE_RATE = 16000
+
+    /** Anything shorter than 0.1 s cannot carry a word and breaks feature extraction. */
+    private const val MIN_SAMPLES = SAMPLE_RATE / 10
         private const val FEATURE_DIM = 64 // GigaAM uses 64 mel bins, not the usual 80
         private const val THREADS = 2
     }

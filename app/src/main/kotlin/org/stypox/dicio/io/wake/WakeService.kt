@@ -137,6 +137,11 @@ class WakeService : Service() {
                     listenForWakeWord()
                     stopWithMessage()
                 } catch (second: Throwable) {
+                    diag(
+                        "giving up: ${second.javaClass.simpleName}: ${second.message} | " +
+                            second.stackTraceToString().lineSequence().take(6)
+                                .joinToString(" <- ")
+                    )
                     stopWithMessage("Не удалось слушать микрофон", second)
                 }
             }
@@ -237,10 +242,12 @@ class WakeService : Service() {
         var readErrors = 0
         var audioFlowing = false
         var frameFaults = 0
+        var loopFaults = 0
 
         try {
             ar.startRecording()
             while (listening.get()) {
+                try {
                 val read = ar.read(frame, 0, frameSize)
                 if (read <= 0) {
                     // a dead microphone used to spin here silently, with the service still "alive"
@@ -333,6 +340,21 @@ class WakeService : Service() {
                 if (now - lastMaintenance > MAINTENANCE_INTERVAL_MILLIS) {
                     lastMaintenance = now
                     onMaintenanceTick()
+                }
+                } catch (cancellation: kotlinx.coroutines.CancellationException) {
+                    throw cancellation
+                } catch (loopError: Throwable) {
+                    // absolutely nothing may stop the listener: report once, pause, continue
+                    if (loopFaults++ < 5) {
+                        diag(
+                            "loop item failed: ${loopError.javaClass.simpleName}: " +
+                                "${loopError.message} | " + loopError.stackTraceToString()
+                                .lineSequence()
+                                .take(6)
+                                .joinToString(" <- ")
+                        )
+                    }
+                    Thread.sleep(50)
                 }
             }
         } finally {
@@ -487,7 +509,11 @@ class WakeService : Service() {
             return true
         }
         return try {
-            val text = GigaAmEngine.recognize(this, tailAudio()).lowercase().replace('ё', 'е')
+            val tail = tailAudio()
+            if (tail.size < 1600) {
+                return true
+            }
+            val text = GigaAmEngine.recognize(this, tail).lowercase().replace('ё', 'е')
             if (text.isBlank()) {
                 return true
             }
