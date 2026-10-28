@@ -45,8 +45,11 @@ class MainSettingsViewModel @Inject constructor(
         updateData { it.setDynamicColors(value) }
     fun setInputDevice(value: InputDevice) =
         updateData { it.setInputDevice(value) }
-    fun setWakeDevice(value: WakeDevice) =
+    /** Choosing a detector by hand clears the safe mode set after repeated crashes. */
+    fun setWakeDevice(value: WakeDevice) {
+        org.stypox.dicio.util.CrashGuard.leaveSafeMode(getApplication())
         updateData { it.setWakeDevice(value) }
+    }
     fun setSpeechOutputDevice(value: SpeechOutputDevice) =
         updateData { it.setSpeechOutputDevice(value) }
     fun setSttPlaySound(value: SttPlaySound) =

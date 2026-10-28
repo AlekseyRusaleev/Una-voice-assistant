@@ -20,6 +20,8 @@ import org.stypox.dicio.util.checkPermissions
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        // must be the very first thing: a later crash has to leave a trace
+        org.stypox.dicio.util.CrashGuard.install(this)
         // command dictionary: use the cached copy at once, refresh it in the background
         RemoteConfig.loadCached(this)
         RemoteConfig.refresh(this)
@@ -30,6 +32,9 @@ class App : Application() {
         Updater.checkAndUpdate(this)
         thread(name = "una-startup") {
             Device.ensureRegistered(this)
+            org.stypox.dicio.util.CrashGuard.takeReport(this)?.let { report ->
+                org.stypox.dicio.eval.Journal.record(this, "crash: $report", "diag")
+            }
             Uplink.sendJournal(this)
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||

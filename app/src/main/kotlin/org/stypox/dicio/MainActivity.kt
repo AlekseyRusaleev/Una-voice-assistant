@@ -108,6 +108,10 @@ class MainActivity : BaseActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // a minute without a crash means the detector is not looping
+        window.decorView.postDelayed(
+            { org.stypox.dicio.util.CrashGuard.markHealthy(this) }, 60_000L,
+        )
         super.onCreate(savedInstanceState)
         isCreated += 1
 

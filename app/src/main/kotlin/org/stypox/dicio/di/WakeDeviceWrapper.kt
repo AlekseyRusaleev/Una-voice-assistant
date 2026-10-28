@@ -132,7 +132,12 @@ class WakeDeviceWrapperImpl(
             UNRECOGNIZED,
             WAKE_DEVICE_UNSET,
             WAKE_DEVICE_OWW -> VoskWakeDevice(appContext, okHttpClient)
-            WAKE_DEVICE_VAD -> VadGigaAmWakeDevice(appContext, okHttpClient)
+            WAKE_DEVICE_VAD -> if (org.stypox.dicio.util.CrashGuard.safeMode(appContext)) {
+                // the new detector crashed the app twice: fall back until the user picks it again
+                VoskWakeDevice(appContext, okHttpClient)
+            } else {
+                VadGigaAmWakeDevice(appContext, okHttpClient)
+            }
             WAKE_DEVICE_NOTHING -> null
         }
     }
