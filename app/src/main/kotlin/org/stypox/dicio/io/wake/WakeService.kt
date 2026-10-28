@@ -201,6 +201,7 @@ class WakeService : Service() {
         // all the time next to a TV
         var noiseFloor = 0.0
         var skippedStreakMillis = 0L
+        val skipSilence = WakeStats.isSkipSilence(this)
 
         try {
             ar.startRecording()
@@ -212,7 +213,8 @@ class WakeService : Service() {
                 rememberFrame(frame, read)
 
                 val level = rms(frame, read)
-                var gateOpen = level > maxOf(MIN_GATE_RMS, noiseFloor * GATE_FACTOR)
+                // gate disabled by default: decoding every frame keeps the wake word reliable
+                var gateOpen = !skipSilence || level > maxOf(MIN_GATE_RMS, noiseFloor * GATE_FACTOR)
                 if (!gateOpen && skippedStreakMillis >= SAFETY_REOPEN_MILLIS) {
                     gateOpen = true
                     skippedStreakMillis = 0

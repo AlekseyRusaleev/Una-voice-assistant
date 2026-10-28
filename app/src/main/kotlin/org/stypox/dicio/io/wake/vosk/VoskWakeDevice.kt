@@ -229,7 +229,7 @@ class VoskWakeDevice(
         private val PREFIX_WORDS = setOf("слушай", "слушайте", "эй", "привет", "окей", "ок", "алло")
 
         /** Confidence Vosk needs for the name itself; the GigaAM re-check is the real filter. */
-        private const val MIN_WAKE_CONFIDENCE = 0.72
+        private const val MIN_WAKE_CONFIDENCE = 0.55
 
         /**
          * The decoder is limited to the wake word plus the words our commands are made of, so that

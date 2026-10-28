@@ -67,6 +67,7 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
     var commands by remember { mutableStateOf(WakeStats.commands(context)) }
     var nearMisses by remember { mutableStateOf(WakeStats.nearMisses(context)) }
     var strict by remember { mutableStateOf(WakeStats.isStrict(context)) }
+    var skipSilence by remember { mutableStateOf(WakeStats.isSkipSilence(context)) }
     var uplink by remember { mutableStateOf(Uplink.isEnabled(context)) }
     var showConsent by remember { mutableStateOf(false) }
     var notesServer by remember { mutableStateOf(NotesSync.isServerAllowed(context)) }
@@ -139,10 +140,15 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
                 commands = commands,
                 nearMisses = nearMisses,
                 strict = strict,
+                skipSilence = skipSilence,
                 uplink = uplink,
                 onStrictChange = {
                     strict = it
                     WakeStats.setStrict(context, it)
+                },
+                onSkipSilenceChange = {
+                    skipSilence = it
+                    WakeStats.setSkipSilence(context, it)
                 },
                 onUplinkChange = { wanted ->
                     if (wanted && !Uplink.isConsented(context)) {
@@ -470,8 +476,10 @@ private fun StatsCard(
     commands: Int,
     nearMisses: Int,
     strict: Boolean,
+    skipSilence: Boolean,
     uplink: Boolean,
     onStrictChange: (Boolean) -> Unit,
+    onSkipSilenceChange: (Boolean) -> Unit,
     onUplinkChange: (Boolean) -> Unit,
     onReset: () -> Unit,
 ) {
@@ -511,6 +519,18 @@ private fun StatsCard(
                     )
                 }
                 Switch(checked = strict, onCheckedChange = onStrictChange)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Пропускать тишину", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Экономит батарею, но имя ловится хуже. Выключено по умолчанию.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = skipSilence, onCheckedChange = onSkipSilenceChange)
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

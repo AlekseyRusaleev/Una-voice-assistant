@@ -17,6 +17,7 @@ import org.json.JSONObject
 import org.stypox.dicio.BuildConfig
 import org.stypox.dicio.R
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -122,6 +123,12 @@ object Updater {
         // filesDir, not cacheDir: a 57 MB APK may be evicted from the cache
         val file = File(File(context.filesDir, "updates"), "una-update.apk")
         file.parentFile?.mkdirs()
+        // a leftover .part from another version would corrupt the resume
+        File(file.parentFile, file.name + ".part").let { part ->
+            if (part.exists() && prefs.getInt(KEY_APK_CODE, 0) != remoteCode) {
+                part.delete()
+            }
+        }
 
         // an APK of exactly this version that was downloaded before is reused instead of being
         // fetched again: this is what used to eat hundreds of megabytes of mobile data
@@ -313,53 +320,82 @@ object Updater {
         null
     }
 
-    /** @return null on success, or a short human-readable reason for the failure. */
+    /**
+     * Downloads the APK, resuming after an interruption with a Range request: on mobile a 43 MB
+     * transfer is often cut, and starting over from zero made the update look broken.
+     *
+     * @return null on success, or a short human-readable reason for the failure.
+     */
     private fun download(
         url: String,
         target: File,
         onProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
-    ): String? = try {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 15000
-            readTimeout = 60000
-            instanceFollowRedirects = true
-        }
-        val code = connection.responseCode
-        if (code !in 200..299) {
-            Log.w(TAG, "APK download HTTP $code")
-            "сервер ответил $code"
-        } else {
-            val total = connection.contentLengthLong.coerceAtLeast(0L)
-            connection.inputStream.use { input ->
-                target.outputStream().use { output ->
-                    val buffer = ByteArray(256 * 1024)
-                    var done = 0L
-                    var lastReport = 0L
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read <= 0) break
-                        output.write(buffer, 0, read)
-                        done += read
-                        // report at most every 2 MB so the UI is not flooded with updates
-                        if (done - lastReport >= 2 * 1024 * 1024) {
-                            lastReport = done
-                            onProgress(done, total)
-                        }
+    ): String? {
+        val partial = File(target.parentFile, target.name + ".part")
+        var lastError = "нет связи"
+
+        for (attempt in 1..MAX_ATTEMPTS) {
+            var have = if (partial.isFile) partial.length() else 0L
+            try {
+                val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 15000
+                    readTimeout = 60000
+                    instanceFollowRedirects = true
+                    if (have > 0) {
+                        setRequestProperty("Range", "bytes=$have-")
                     }
-                    onProgress(done, total)
                 }
+                val code = connection.responseCode
+                if (code !in 200..299) {
+                    connection.disconnect()
+                    Log.w(TAG, "APK download HTTP $code")
+                    return "сервер ответил $code"
+                }
+                val remaining = connection.contentLengthLong.coerceAtLeast(0L)
+                val total = if (code == 206) have + remaining else remaining
+                // 200 means the server ignored the Range header and starts over
+                val append = have > 0 && code == 206
+                if (!append) {
+                    have = 0
+                }
+                connection.inputStream.use { input ->
+                    FileOutputStream(partial, append).use { output ->
+                        val buffer = ByteArray(256 * 1024)
+                        var done = have
+                        var lastReport = done
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            output.write(buffer, 0, read)
+                            done += read
+                            if (done - lastReport >= 1024 * 1024) {
+                                lastReport = done
+                                onProgress(done, total)
+                            }
+                        }
+                        onProgress(done, total)
+                    }
+                }
+                connection.disconnect()
+                if (total > 0 && partial.length() < total) {
+                    lastError = "получено ${partial.length() / 1024} из ${total / 1024} КБ"
+                } else if (partial.length() < 1024 * 1024) {
+                    return "получено всего ${partial.length()} байт"
+                } else if (partial.renameTo(target)) {
+                    return null
+                } else {
+                    return "не удалось сохранить APK"
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "APK download attempt $attempt failed", t)
+                lastError = "${t.javaClass.simpleName}: ${t.message ?: "нет подробностей"}"
             }
-            connection.disconnect()
-            if (target.length() < 1024 * 1024) {
-                "получено всего ${target.length()} байт"
-            } else {
-                null
-            }
+            Thread.sleep(2000L * attempt)
         }
-    } catch (t: Throwable) {
-        Log.w(TAG, "APK download failed", t)
-        "${t.javaClass.simpleName}: ${t.message ?: "нет подробностей"}"
+        return lastError
     }
+
+    private const val MAX_ATTEMPTS = 5
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")

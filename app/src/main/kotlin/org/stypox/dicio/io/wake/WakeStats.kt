@@ -17,6 +17,7 @@ object WakeStats {
     private const val KEY_COMMANDS = "commands"
     private const val KEY_NEAR = "near"
     private const val KEY_STRICT = "strict"
+    private const val KEY_SKIP_SILENCE = "skip_silence"
     private const val KEY_FRAMES = "frames"
     private const val KEY_SKIPPED = "skipped"
     private const val KEY_CPU_MILLIS = "cpu_millis"
@@ -97,6 +98,18 @@ object WakeStats {
             .putLong(KEY_FRAMES, prefs.getLong(KEY_FRAMES, 0L) + newFrames)
             .putLong(KEY_SKIPPED, prefs.getLong(KEY_SKIPPED, 0L) + newSkipped)
             .apply()
+    }
+
+    /**
+     * Skipping silence saves battery, but it also removes the acoustic context the decoder needs:
+     * with it on, the name was recognised with lower confidence and real wake-ups were lost. That
+     * is why it is off by default and only a deliberate choice.
+     */
+    fun isSkipSilence(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SKIP_SILENCE, false)
+
+    fun setSkipSilence(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SKIP_SILENCE, enabled).apply()
     }
 
     /** Strict mode re-checks every trigger with the accurate model before doing anything. */
