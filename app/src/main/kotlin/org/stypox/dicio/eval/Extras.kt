@@ -48,14 +48,10 @@ object Extras {
     private val NOTE_DELETE = Regex("""удали\s+заметку\s+(.+)""", RegexOption.IGNORE_CASE)
     private val ALARM = Regex("""будильник\s+(?:на\s+)?([\dа-я]+)(?:[:.](\d{2}))?""", RegexOption.IGNORE_CASE)
     private val TIMER = Regex("""таймер\s*(?:на\s+)?(.+)""", RegexOption.IGNORE_CASE)
-    private val FLASHLIGHT = Regex(
-        """(включи|вруби|зажги|включить)\s+(фонарик|фонарь|свет|подсветк\w*)""",
-        RegexOption.IGNORE_CASE,
-    )
-    private val FLASHLIGHT_OFF = Regex(
-        """(выключи|выруби|погаси|отключи|выключить)\s+(фонарик|фонарь|свет|подсветк\w*)""",
-        RegexOption.IGNORE_CASE,
-    )
+    /** "включи фонарик", "фонарик включи", "фонариком посвети" — the word order varies. */
+    private val FLASHLIGHT_WORDS = Regex("""фонар\w*|подсветк\w*|фонарик""", RegexOption.IGNORE_CASE)
+    private val TORCH_ON = Regex("""включ\w*|вруб\w*|зажг\w*|посвети\w*|разреши""", RegexOption.IGNORE_CASE)
+    private val TORCH_OFF = Regex("""выключ\w*|выруб\w*|погас\w*|отключ\w*|потуши\w*""", RegexOption.IGNORE_CASE)
     private val YOUTUBE = Regex(
         """ютуб\w*\s+(?:включи\s+)?(.+)""", RegexOption.IGNORE_CASE
     )
@@ -73,12 +69,9 @@ object Extras {
     /** @return true when the phrase was handled here. */
     fun handle(context: Context, text: String, utterance: String): Boolean {
         // ---- flashlight: "включи фонарик" must never be read as "turn the music on"
-        if (FLASHLIGHT.containsMatchIn(text)) {
-            setTorch(context, true)
-            return true
-        }
-        if (FLASHLIGHT_OFF.containsMatchIn(text)) {
-            setTorch(context, false)
+        if (FLASHLIGHT_WORDS.containsMatchIn(text)) {
+            CommandTrace.set("фонарик")
+            setTorch(context, !TORCH_OFF.containsMatchIn(text))
             return true
         }
 
@@ -115,6 +108,7 @@ object Extras {
 
         // ---- notes
         NOTE_DELETE.find(text)?.let { match ->
+            CommandTrace.set("заметки")
             val query = match.groupValues[1].trim()
             val removed = Notes.removeContaining(context, query)
             notify(
@@ -124,6 +118,7 @@ object Extras {
             return true
         }
         NOTE_ADD.find(text)?.let { match ->
+            CommandTrace.set("заметки")
             val body = match.groupValues[1].trim()
             if (body.length >= 2 && !body.startsWith("заметк")) {
                 Notes.add(context, body)
@@ -145,6 +140,7 @@ object Extras {
 
         // ---- reminders
         if (text.contains("напомн")) {
+            CommandTrace.set("напоминание")
             val at = When.parse(text)
             if (at == null) {
                 notify(context, "Напоминание", "Не понял время. Скажите, например: «напомни в 18:30»")
@@ -159,6 +155,7 @@ object Extras {
 
         // ---- alarm clock
         ALARM.find(text)?.let { match ->
+            CommandTrace.set("будильник")
             val rawHour = match.groupValues[1]
             val hour = rawHour.toIntOrNull() ?: RemoteConfig.current.numberWords[rawHour] ?: return@let
             val minute = match.groupValues[2].toIntOrNull() ?: 0
@@ -170,6 +167,7 @@ object Extras {
 
         // ---- timer
         TIMER.find(text)?.let { match ->
+            CommandTrace.set("таймер")
             val at = When.parse("через " + match.groupValues[1])
             if (at != null) {
                 val seconds = ((at - System.currentTimeMillis()) / 1000).toInt().coerceAtLeast(1)
@@ -234,6 +232,7 @@ object Extras {
 
         // ---- battery
         if (text.contains("заряд") || text.contains("батаре")) {
+            CommandTrace.set("заряд")
             val manager = context.getSystemService<BatteryManager>()
             val level = manager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
             notify(context, "Батарея", if (level >= 0) "$level%" else "Не удалось узнать")
@@ -258,6 +257,7 @@ object Extras {
         OPEN_APP.find(text)?.let { match ->
             val name = match.groupValues[1].trim()
             if (name.length >= 2) {
+                CommandTrace.set("приложение")
                 val intent = findApp(context, name)
                 if (intent != null) {
                     try {
@@ -274,6 +274,7 @@ object Extras {
         YOUTUBE.find(text)?.let { match ->
             val query = match.groupValues[1].trim()
             if (query.length >= 2) {
+                CommandTrace.set("ютуб")
                 openYoutubeSearch(context, query)
                 notify(context, "YouTube", "Ищу: $query")
                 return true

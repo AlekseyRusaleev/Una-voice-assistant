@@ -551,11 +551,13 @@ class WakeService : Service() {
         intent.setAction(ACTION_WAKE_WORD)
         intent.setFlags(FLAG_ACTIVITY_NEW_TASK)
 
-        // If the command was spoken in the same phrase as the wake word (e.g. "Una, next track"),
-        // the wake device already decoded it, so we can run the skills right away instead of
-        // starting another listening round.
+        // The wake device decodes the command with its own tiny grammar, so any word missing from
+        // that grammar simply disappears: "включи фонарик" arrives as "включи" and then plays
+        // music. The accurate model is therefore always tried first; the inline decode is only a
+        // fallback when it heard nothing at all.
         val inlineCommand = wakeDevice.takeDetectedCommand()
-        if (inlineCommand.isNullOrBlank() && !transcribeWithGigaAm(ar)) {
+        val transcribed = transcribeWithGigaAm(ar)
+        if (!transcribed && inlineCommand.isNullOrBlank()) {
             // Start listening and pass STT events to the skill evaluator.
             // Note that this works even if the MainActivity is opened later!
             sttInputDevice.tryLoad(skillEvaluator::processInputEvent)
@@ -563,13 +565,15 @@ class WakeService : Service() {
             // Unload the STT after a while because it would be using RAM uselessly
             handler.removeCallbacks(releaseSttResourcesRunnable)
             handler.postDelayed(releaseSttResourcesRunnable, RELEASE_STT_RESOURCES_MILLIS)
-        } else {
+        } else if (!transcribed) {
+            // GigaAM heard nothing: fall back to the coarse inline decode, but only when it is a
+            // real phrase, because a single stray word is usually a decoding artefact
             val inline = inlineCommand ?: ""
             if (inline.isNotEmpty()) {
                 WakeStats.onCommand(this)
+                Log.d(TAG, "Running the inline command: $inline")
+                skillEvaluator.processInputEvent(InputEvent.Final(listOf(inline to 1.0f)))
             }
-            Log.d(TAG, "Running the command that came with the wake word: $inline")
-            skillEvaluator.processInputEvent(InputEvent.Final(listOf(inline to 1.0f)))
 
             // A skill may ask a follow-up question (e.g. "Call mom?" before dialing), so keep
             // listening — but only after a short delay, otherwise the tail of the same phrase

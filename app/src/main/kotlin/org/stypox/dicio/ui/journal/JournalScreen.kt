@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -111,6 +112,8 @@ fun JournalScreen(navigationIcon: @Composable () -> Unit) {
             )
 
             UpdateCard(onResult = { Journal.record(context, it, "update") })
+
+            CommandCheckCard()
 
             NotesUploadCard(
                 enabled = notesServer,
@@ -282,6 +285,56 @@ private fun ModelCard(
                     Button(onClick = onDownload) {
                         Text(if (downloadedMb > 0) "Продолжить" else "Скачать")
                     }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun CommandCheckCard() {
+    val context = LocalContext.current
+    var phrase by remember { mutableStateOf("") }
+    var result by remember { mutableStateOf<String?>(null) }
+
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text("Проверка команд", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Введите фразу, и приложение покажет, куда она попадёт. Команда при этом " +
+                    "выполнится по-настоящему — начните с безобидной.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = phrase,
+                onValueChange = { phrase = it },
+                singleLine = true,
+                label = { Text("Фраза") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(
+                    onClick = {
+                        val handled = org.stypox.dicio.eval.FastCommands.handle(context, phrase)
+                        result = if (handled) {
+                            "Обработано здесь: ${org.stypox.dicio.eval.CommandTrace.stage}"
+                        } else {
+                            "Уходит в навыки (${org.stypox.dicio.eval.CommandTrace.stage})"
+                        }
+                    },
+                ) { Text("Проверить") }
+                if (result != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = result.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 12.dp),
+                    )
                 }
             }
         }

@@ -30,6 +30,13 @@ object FastCommands {
     )
 
     private val CALL_VERBS = listOf("позвони", "позвонить", "набери", "набрать", "набери номер")
+
+    /** Words that mean the phrase is about something other than music. */
+    private val OTHER_INTENTS = listOf(
+        "фонар", "подсветк", "ютуб", "youtube", "таймер", "будильник", "свет",
+        "заметк", "напомн", "календар", "смс", "позвони", "набери", "громк",
+        "уведомлен", "заряд", "батаре", "беззвучн", "вибрац", "яндекс",
+    )
     /** Longest endings first, so that "ого" is stripped before "о". */
     private val STEM_SUFFIXES = listOf(
         "ами", "ями", "ого", "его", "ому", "ему", "ыми", "ими", "ая", "яя", "ой", "ей",
@@ -50,8 +57,11 @@ object FastCommands {
         }
         val config = RemoteConfig.current
 
+        CommandTrace.reset("не поняла")
+
         // 1. call someone: "позвони маме", "набери Лёше"
         if (CALL_VERBS.any { text.contains(it) }) {
+            CommandTrace.set("звонок")
             if (handleCall(context, text)) {
                 return true
             }
@@ -64,20 +74,24 @@ object FastCommands {
 
         // 2. exact volume: "громкость на семь"
         VOLUME.find(text)?.let { match ->
+            CommandTrace.set("громкость")
             parseNumber(match.groupValues[1])?.let { return setVolume(context, it) }
         }
 
         // 3. relative volume: "громче", "потише"
         if (config.volumeUp.any { text.contains(it) }) {
+            CommandTrace.set("громче")
             return adjustVolume(context, AudioManager.ADJUST_RAISE)
         }
         if (config.volumeDown.any { text.contains(it) }) {
+            CommandTrace.set("тише")
             return adjustVolume(context, AudioManager.ADJUST_LOWER)
         }
 
         // 4. Yandex Music sections: both the action and the section word must be present
         if (config.yandexOpen.any { text.contains(it) }) {
             if (config.yandexWave.any { text.contains(it) }) {
+                CommandTrace.set("яндекс музыка")
                 return openYandexMusic(context, "wave")
             }
             if (config.yandexLiked.any { text.contains(it) }) {
@@ -86,12 +100,12 @@ object FastCommands {
         }
 
         // 5. media control: "previous" first, because "переключи на предыдущий" contains both.
-        // Verbs like "включи" or "выключи" are too common ("включи фонарик", "поставь таймер"),
-        // so play/pause only fire when the phrase is really about music: it names a track, or it
-        // consists of the bare verb alone.
+        // Verbs like "включи" are too common ("включи фонарик", "фонарик включи"), so music only
+        // reacts when the phrase is about music, or when nothing else is asked for.
         val hasMusicContext = config.musicContext.any { text.contains(it) }
         val words = text.split(' ').filter { it.isNotBlank() }
-        val bareCommand = words.size <= 3
+        val asksForSomethingElse = OTHER_INTENTS.any { text.contains(it) }
+        val bareCommand = !asksForSomethingElse && words.size <= 2
         val mediaKey = when {
             config.previous.any { text.contains(it) } && (hasMusicContext || bareCommand) ->
                 KeyEvent.KEYCODE_MEDIA_PREVIOUS
@@ -108,9 +122,18 @@ object FastCommands {
             else -> null
         }
         if (mediaKey != null) {
+            CommandTrace.set(
+                when (mediaKey) {
+                    KeyEvent.KEYCODE_MEDIA_PLAY -> "музыка: играть"
+                    KeyEvent.KEYCODE_MEDIA_PAUSE -> "музыка: пауза"
+                    KeyEvent.KEYCODE_MEDIA_NEXT -> "музыка: следующий"
+                    else -> "музыка: предыдущий"
+                }
+            )
             return sendMediaKey(context, mediaKey)
         }
 
+        CommandTrace.set("навыки")
         return false
     }
 
