@@ -49,6 +49,7 @@ class VoskWakeDevice(
     private var recognizer: Recognizer? = null
     private var logLevelSet = false
     private var detectedCommand: String? = null
+    private var detectedConfidence = 0.0
     private var pcmBuffer = ByteArray(0)
 
     /**
@@ -201,13 +202,16 @@ class VoskWakeDevice(
                 if (word !in WAKE_WORDS) {
                     return "" to false
                 }
-                if (confidence < MIN_WAKE_CONFIDENCE) {
+                // the threshold comes from the server, so it can be tuned without a new build
+                val threshold = RemoteConfig.current.minConfidence.coerceIn(0.3, 0.95)
+                if (confidence < threshold) {
                     // the name was heard but not confidently: count it for tuning
                     WakeStats.onNearMiss(appContext)
                     Log.d(TAG, "near miss: $word at $confidence")
                     return "" to false
                 }
                 seenWakeWord = true
+                detectedConfidence = confidence
             } else {
                 command.add(word)
             }
@@ -219,6 +223,13 @@ class VoskWakeDevice(
         val command = detectedCommand
         detectedCommand = null
         return command
+    }
+
+    /** How sure the decoder was about the name itself, 0..1. */
+    fun takeDetectedConfidence(): Double {
+        val value = detectedConfidence
+        detectedConfidence = 0.0
+        return value
     }
 
     private fun newRecognizer(): Recognizer =

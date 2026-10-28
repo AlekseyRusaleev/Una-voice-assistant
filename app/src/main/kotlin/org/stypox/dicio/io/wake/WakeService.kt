@@ -378,7 +378,8 @@ class WakeService : Service() {
         WakeStats.flushFrames(this)
         diag(
             "alive: silence=${WakeStats.skippedPercent(this)}% cpu=${WakeStats.cpuPercent(this)}% " +
-                "triggers=${WakeStats.triggers(this)} near=${WakeStats.nearMisses(this)}"
+                "triggers=${WakeStats.triggers(this)} rejected=${WakeStats.rejected(this)} " +
+                "near=${WakeStats.nearMisses(this)}"
         )
 
         if (!isPowerSaver()) {
@@ -512,8 +513,9 @@ class WakeService : Service() {
         }
         return try {
             val tail = tailAudio()
-            if (tail.size < 1600) {
-                return true
+            // no audio means no confirmation: accepting was a hole that let background noise through
+            if (tail.size < MIN_TAIL_SAMPLES) {
+                return false
             }
             val text = GigaAmEngine.recognize(this, tail).lowercase().replace('ё', 'е')
             if (text.isBlank()) {
@@ -533,7 +535,11 @@ class WakeService : Service() {
         WakeStats.onTrigger(this)
         Log.d(TAG, "Wake word detected")
 
-        if (WakeStats.isStrict(this) && !verifyWithGigaAm()) {
+        val confidence = wakeDevice.takeDetectedConfidence()
+        // a very confident decode is acted on immediately; the expensive re-check is only needed
+        // when the decoder itself is unsure, which is also what kept the assistant feeling slow
+        val needsCheck = confidence < CONFIDENT_ENOUGH
+        if (WakeStats.isStrict(this) && needsCheck && !verifyWithGigaAm()) {
             WakeStats.onRejected(this)
             Journal.record(this, "(ложное срабатывание)", "rejected")
             Uplink.sendAudio(this, tailAudio(), "rejected")
@@ -724,7 +730,11 @@ class WakeService : Service() {
         private const val FOREGROUND_NOTIFICATION_ID = 19803672
         private const val START_NOTIFICATION_ID = 48019274
         private const val TRIGGERED_NOTIFICATION_ID = 601398647
-        private const val WAKE_WORD_BACKOFF_MILLIS = 4000L
+        /** Short pause after a wake-up: 4 s made the next attempt feel ignored. */
+        private const val WAKE_WORD_BACKOFF_MILLIS = 1500L
+
+        /** Above this decoder confidence the strict re-check is skipped for speed. */
+        private const val CONFIDENT_ENOUGH = 0.85
         private const val ACTION_STOP_WAKE_SERVICE =
             "org.stypox.dicio.io.wake.WakeService.ACTION_STOP"
         private const val RELEASE_STT_RESOURCES_MILLIS = 1000L * 60 * 5 // 5 minutes
@@ -742,6 +752,9 @@ class WakeService : Service() {
         /** How often the running service looks for a new version. */
         /** Journal upload and updater tick: the updater itself only acts every few hours. */
         private const val MAINTENANCE_INTERVAL_MILLIS = 30L * 60 * 1000
+
+        /** At least 0.3 s of audio is needed to check whether the name was really spoken. */
+        private const val MIN_TAIL_SAMPLES = 4800
 
         /** Consecutive empty microphone reads after which the service gives up and retries. */
         private const val MAX_READ_ERRORS = 250

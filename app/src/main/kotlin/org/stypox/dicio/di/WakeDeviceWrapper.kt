@@ -44,6 +44,9 @@ interface WakeDeviceWrapper {
      */
     fun takeDetectedCommand(): String?
 
+    /** How sure the detector was about the name itself, 0..1. */
+    fun takeDetectedConfidence(): Double
+
     /**
      * @see [WakeDevice.processFrame]
      */
@@ -136,6 +139,11 @@ class WakeDeviceWrapperImpl(
     }
 
     override fun takeDetectedCommand(): String? = currentDevice.value?.takeDetectedCommand()
+
+    override fun takeDetectedConfidence(): Double = when (val device = currentDevice.value) {
+        is org.stypox.dicio.io.wake.vosk.VoskWakeDevice -> device.takeDetectedConfidence()
+        else -> 1.0
+    }
 
     override fun processFrame(audio16bitPcm: ShortArray): Boolean {
         val device = currentDevice.value
