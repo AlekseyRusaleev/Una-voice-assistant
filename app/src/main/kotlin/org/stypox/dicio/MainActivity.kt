@@ -119,6 +119,9 @@ class MainActivity : BaseActivity() {
             sttInputDevice.tryLoad(null)
         }
 
+        // without the wake model the service refuses to start, and after a reinstall the model is
+        // gone: fetch it right away instead of hoping the user finds the download card
+        wakeDevice.download()
         WakeService.start(this)
         wakeServiceJob?.cancel()
         wakeServiceJob = lifecycleScope.launch {
