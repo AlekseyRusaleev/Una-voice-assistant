@@ -40,6 +40,7 @@ import org.stypox.dicio.eval.Uplink
 import org.stypox.dicio.io.input.gigaam.GigaAmModel
 import org.stypox.dicio.io.input.gigaam.GigaAmEngine
 import org.stypox.dicio.io.input.InputEvent
+import java.io.File
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -103,15 +104,21 @@ class WakeService : Service() {
         WakeDiag.clear()
 
         if (ContextCompat.checkSelfPermission(this, RECORD_AUDIO) != PERMISSION_GRANTED) {
+            diag("start refused: no RECORD_AUDIO")
             stopWithMessage("Could not start WakeService: microphone permission not granted")
             return START_NOT_STICKY
         }
 
-        when (wakeDevice.state.value) {
+        when (val state = wakeDevice.state.value) {
             WakeState.NotLoaded,
             WakeState.Loading,
-            WakeState.Loaded -> {}
+            WakeState.Loaded -> diag(
+                "start: state=$state mic=ok sdk=${Build.VERSION.SDK_INT} " +
+                    "gigaam=${GigaAmModel.isReady(this)} model=${voskModelSummary()}"
+            )
+
             else -> {
+                diag("start refused: wake device state=$state")
                 stopWithMessage("Could not start WakeService: wake word device not ready")
                 return START_NOT_STICKY
             }
@@ -154,12 +161,20 @@ class WakeService : Service() {
         if (message.isNotEmpty()) {
             // the home screen shows this, so a silent stop is no longer silent
             WakeDiag.record(message, throwable)
+            diag("stop: $message${throwable?.let { " (${it.javaClass.simpleName})" } ?: ""}")
         }
         if (throwable != null) {
             Log.e(TAG, message, throwable)
         } else if (message.isNotEmpty()) {
             Log.e(TAG, message)
         }
+    }
+
+
+    /** Records a diagnostic line locally and uploads it right away, so problems are visible remotely. */
+    private fun diag(line: String) {
+        Journal.record(this, line, "diag")
+        Uplink.sendJournal(this)
     }
 
     private fun createForegroundNotification() {
@@ -220,6 +235,7 @@ class WakeService : Service() {
         var skippedStreakMillis = 0L
         val skipSilence = WakeStats.isSkipSilence(this)
         var readErrors = 0
+        var audioFlowing = false
 
         try {
             ar.startRecording()
@@ -238,6 +254,10 @@ class WakeService : Service() {
                 rememberFrame(frame, read)
 
                 val level = rms(frame, read)
+                if (!audioFlowing) {
+                    audioFlowing = true
+                    diag("audio flows: first frame rms=${level.toInt()} frameSize=$frameSize")
+                }
                 // gate disabled by default: decoding every frame keeps the wake word reliable
                 var gateOpen = !skipSilence || level > maxOf(MIN_GATE_RMS, noiseFloor * GATE_FACTOR)
                 if (!gateOpen && skippedStreakMillis >= SAFETY_REOPEN_MILLIS) {
@@ -319,11 +339,26 @@ class WakeService : Service() {
         }
         WakeStats.setBaseline(this, cpuNow, wallNow)
         WakeStats.flushFrames(this)
+        diag(
+            "alive: silence=${WakeStats.skippedPercent(this)}% cpu=${WakeStats.cpuPercent(this)}% " +
+                "triggers=${WakeStats.triggers(this)} near=${WakeStats.nearMisses(this)}"
+        )
 
         if (!isPowerSaver()) {
             org.stypox.dicio.update.Updater.checkAndUpdate(this)
             org.stypox.dicio.eval.Uplink.sendJournal(this)
         }
+    }
+
+    /** Size of the unpacked Vosk model, to spot a truncated download. */
+    private fun voskModelSummary(): String {
+        val dir = File(filesDir, "vosk-wake/model")
+        var files = 0
+        var bytes = 0L
+        if (dir.exists()) {
+            dir.walkTopDown().forEach { if (it.isFile) { files++; bytes += it.length() } }
+        }
+        return "${files}f/${bytes / 1024 / 1024}MB"
     }
 
     private fun isPowerSaver(): Boolean =

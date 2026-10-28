@@ -122,6 +122,11 @@ class VoskWakeDevice(
                 _state.value = WakeState.Loaded
             } catch (t: Throwable) {
                 Log.e(TAG, "Failed to load the Vosk wake word model", t)
+                org.stypox.dicio.eval.Journal.record(
+                    appContext,
+                    "diag: vosk load failed ${t.javaClass.simpleName}: ${t.message}",
+                    "diag",
+                )
                 _state.value = WakeState.ErrorLoading(t)
                 return false
             }
