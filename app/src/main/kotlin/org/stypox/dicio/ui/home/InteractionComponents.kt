@@ -64,8 +64,12 @@ fun InteractionList(
     interactionLog: InteractionLog,
     onConfirmedQuestionClick: (String) -> Unit,
     wakeState: WakeState?,
+    serviceRunning: Boolean,
+    recogniserReady: Boolean,
     onWakeDownload: () -> Unit,
     onWakeDisable: () -> Unit,
+    onWakeEnable: () -> Unit,
+    onRecogniserDownload: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var totalItemCount = 0
@@ -92,13 +96,15 @@ fun InteractionList(
         state = listState,
     ) {
         countedItem(canBeAnchor = false) {
-            if (wakeState != null) {
-                WakeWordWidget(
-                    wakeState = wakeState,
-                    onWakeDownload = onWakeDownload,
-                    onWakeDisable = onWakeDisable,
-                )
-            }
+            WakeWordWidget(
+                wakeState = wakeState,
+                serviceRunning = serviceRunning,
+                recogniserReady = recogniserReady,
+                onWakeDownload = onWakeDownload,
+                onWakeDisable = onWakeDisable,
+                onWakeEnable = onWakeEnable,
+                onRecogniserDownload = onRecogniserDownload,
+            )
         }
 
         countedItem(canBeAnchor = false) {
@@ -195,8 +201,12 @@ fun InteractionListPreview(
             skills = SkillInfoPreviews().values.toList(),
             interactionLog = interactionLog,
             wakeState = wakeStatesPreviews[interactionLog.hashCode().absoluteValue % wakeStatesPreviews.size],
+            serviceRunning = true,
+            recogniserReady = true,
             onWakeDownload = {},
             onWakeDisable = {},
+            onWakeEnable = {},
+            onRecogniserDownload = {},
             onConfirmedQuestionClick = {},
         )
     }

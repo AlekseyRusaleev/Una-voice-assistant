@@ -19,6 +19,7 @@ import org.stypox.dicio.eval.SkillHandler
 import org.stypox.dicio.io.input.SttState
 import org.stypox.dicio.io.speech.SnackbarSpeechDevice
 import org.stypox.dicio.settings.datastore.UserSettings
+import org.stypox.dicio.io.wake.WakeService
 import org.stypox.dicio.settings.datastore.WakeDevice
 import org.stypox.dicio.settings.datastore.copy
 import javax.inject.Inject
@@ -63,6 +64,16 @@ class HomeScreenViewModel @Inject constructor(
             sttInputDevice.uiState
                 .filter { it == SttState.Listening }
                 .collect { speechOutputDevice.stopSpeaking() }
+        }
+    }
+
+    /** Turns the wake word back on and (re)starts the background service. */
+    fun enableWakeWord() {
+        viewModelScope.launch {
+            dataStore.updateData {
+                it.copy { wakeDevice = WakeDevice.WAKE_DEVICE_OWW }
+            }
+            WakeService.start(getApplication())
         }
     }
 

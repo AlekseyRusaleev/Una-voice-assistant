@@ -12,6 +12,8 @@ import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Card
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -49,12 +51,50 @@ else
  */
 @Composable
 fun WakeWordWidget(
-    wakeState: WakeState,
+    wakeState: WakeState?,
+    serviceRunning: Boolean,
+    recogniserReady: Boolean,
     onWakeDownload: () -> Unit,
     onWakeDisable: () -> Unit,
+    onWakeEnable: () -> Unit,
+    onRecogniserDownload: () -> Unit,
 ) {
     val permissionsState by rememberMultiplePermissionState(*wakeWordPermissions)
     val launcher = rememberPermissionFlowRequestLauncher()
+
+    // the assistant can be silent for three very different reasons, and each has its own fix
+    if (wakeState == null) {
+        UnaStatusCard(
+            title = "Прослушивание выключено",
+            detail = "Юна не реагирует на имя, потому что слово-триггер отключено.",
+            action = "Включить",
+            onAction = onWakeEnable,
+        )
+        return
+    }
+    if (wakeState is WakeState.Loaded || wakeState is WakeState.Loading ||
+        wakeState is WakeState.NotLoaded
+    ) {
+        if (!serviceRunning) {
+            UnaStatusCard(
+                title = "Служба не слушает микрофон",
+                detail = "Слово-триггер включён, но служба не работает. Обычно помогает " +
+                    "перезапуск приложения или снятие ограничений батареи.",
+                action = "Запустить",
+                onAction = onWakeEnable,
+            )
+            return
+        }
+        if (!recogniserReady) {
+            UnaStatusCard(
+                title = "Нет модели распознавания",
+                detail = "Имя ловится, но команда не распознаётся без модели GigaAM (~216 МБ).",
+                action = "Скачать",
+                onAction = onRecogniserDownload,
+            )
+        }
+        return
+    }
 
     if (!permissionsState.allGranted) {
         WakeWordWidgetImpl(
@@ -184,4 +224,30 @@ private fun WakeWordWidgetPreview(@PreviewParameter(WakeStatesPreviews::class) w
         onWakeDownload = {},
         onWakeDisable = {},
     )
+}
+
+@Composable
+private fun UnaStatusCard(
+    title: String,
+    detail: String,
+    action: String,
+    onAction: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(text = title, style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            ElevatedButton(onClick = onAction) { Text(text = action) }
+        }
+    }
 }

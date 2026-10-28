@@ -200,6 +200,7 @@ class WakeService : Service() {
         // the gate adapts to the room: a fixed threshold is either deaf in a quiet room or open
         // all the time next to a TV
         var noiseFloor = 0.0
+        var skippedStreakMillis = 0L
 
         try {
             ar.startRecording()
@@ -211,7 +212,11 @@ class WakeService : Service() {
                 rememberFrame(frame, read)
 
                 val level = rms(frame, read)
-                val gateOpen = level > maxOf(MIN_GATE_RMS, noiseFloor * GATE_FACTOR)
+                var gateOpen = level > maxOf(MIN_GATE_RMS, noiseFloor * GATE_FACTOR)
+                if (!gateOpen && skippedStreakMillis >= SAFETY_REOPEN_MILLIS) {
+                    gateOpen = true
+                    skippedStreakMillis = 0
+                }
                 if (!gateOpen) {
                     noiseFloor = if (noiseFloor <= 0.0) level else noiseFloor * 0.98 + level * 0.02
                 }
@@ -227,6 +232,9 @@ class WakeService : Service() {
                     }
                 }
 
+                if (gateOpen) {
+                    skippedStreakMillis = 0
+                }
                 val detected = if (gateOpen || speechInProgress) {
                     // the name may start quietly: replay the buffered frames before this one
                     var fired = false
@@ -242,6 +250,7 @@ class WakeService : Service() {
                         preroll.removeFirst()
                     }
                     WakeStats.onSkippedFrame()
+                    skippedStreakMillis += FRAME_MILLIS
                     false
                 }
                 WakeStats.onFrame()
@@ -616,10 +625,17 @@ class WakeService : Service() {
         private const val MAINTENANCE_INTERVAL_MILLIS = 30L * 60 * 1000
 
         /** Speaking level, relative to the measured noise floor of the room. */
-        private const val GATE_FACTOR = 2.5
+        private const val GATE_FACTOR = 2.0
 
         /** Absolute minimum so that a near-silent room does not open the gate on its own noise. */
-        private const val MIN_GATE_RMS = 180.0
+        private const val MIN_GATE_RMS = 90.0
+
+        /**
+         * After this much continuous silence the gate opens anyway for a moment: a quiet voice or a
+         * phone held far away must never turn the assistant deaf, which is worse than a few extra
+         * decodes.
+         */
+        private const val SAFETY_REOPEN_MILLIS = 15_000
 
         /** How long speech is assumed to continue after the level dropped. */
         private const val GATE_HANGOVER_MILLIS = 600

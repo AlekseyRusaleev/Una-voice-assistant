@@ -10,6 +10,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,6 +38,8 @@ import org.stypox.dicio.di.SkillContextImpl
 import org.stypox.dicio.eval.SkillEvaluator
 import org.stypox.dicio.io.input.InputEvent
 import org.stypox.dicio.io.input.SttState
+import org.stypox.dicio.io.input.gigaam.GigaAmModel
+import org.stypox.dicio.io.wake.WakeService
 import org.stypox.dicio.io.wake.WakeState
 import org.stypox.dicio.ui.nav.SearchTopAppBar
 import org.stypox.dicio.ui.theme.AppTheme
@@ -91,6 +95,15 @@ fun HomeScreen(
     val interactionsState = viewModel.skillEvaluator.state.collectAsState()
     val sttState = viewModel.sttInputDevice.uiState.collectAsState()
     val wakeState = viewModel.wakeDevice.state.collectAsState()
+    var serviceRunning by remember { mutableStateOf(WakeService.isRunning()) }
+    var recogniserReady by remember { mutableStateOf(GigaAmModel.isReady(context)) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            serviceRunning = WakeService.isRunning()
+            recogniserReady = GigaAmModel.isReady(context)
+            delay(2000)
+        }
+    }
 
     HomeScreen(
         skillContext = viewModel.skillContext,
@@ -101,10 +114,14 @@ fun HomeScreen(
             viewModel.sttInputDevice.onClick(viewModel.skillEvaluator::processInputEvent)
         },
         wakeState = wakeState.value,
+        serviceRunning = serviceRunning,
+        recogniserReady = recogniserReady,
         onWakeDownload = {
             viewModel.wakeDevice.download()
         },
         onWakeDisable = viewModel::disableWakeWord,
+        onWakeEnable = viewModel::enableWakeWord,
+        onRecogniserDownload = { GigaAmModel.downloadIfNeeded(context) },
         onManualUserInput = {
             viewModel.skillEvaluator.processInputEvent(InputEvent.Final(listOf(Pair(it, 1.0f))))
         },
@@ -125,8 +142,12 @@ fun HomeScreen(
     sttState: SttState?,
     onSttClick: () -> Unit,
     wakeState: WakeState?,
+    serviceRunning: Boolean,
+    recogniserReady: Boolean,
     onWakeDownload: () -> Unit,
     onWakeDisable: () -> Unit,
+    onWakeEnable: () -> Unit,
+    onRecogniserDownload: () -> Unit,
     onManualUserInput: (String) -> Unit,
     navigationIcon: @Composable () -> Unit,
     snackbarHost: @Composable () -> Unit,
@@ -159,8 +180,12 @@ fun HomeScreen(
                 interactionLog = interactionLog,
                 onConfirmedQuestionClick = { searchString = it },
                 wakeState = wakeState,
+                serviceRunning = serviceRunning,
+                recogniserReady = recogniserReady,
                 onWakeDownload = onWakeDownload,
                 onWakeDisable = onWakeDisable,
+                onWakeEnable = onWakeEnable,
+                onRecogniserDownload = onRecogniserDownload,
                 modifier = Modifier.padding(paddingValues),
             )
         },
@@ -192,8 +217,12 @@ private fun HomeScreenPreview(@PreviewParameter(InteractionLogPreviews::class) i
             sttState = sttStatesPreviews[i % sttStatesPreviews.size],
             onSttClick = { i += 1 },
             wakeState = null,
+            serviceRunning = false,
+            recogniserReady = false,
             onWakeDownload = {},
             onWakeDisable = {},
+            onWakeEnable = {},
+            onRecogniserDownload = {},
             onManualUserInput = {},
             navigationIcon = {
                 IconButton(onClick = {}) {
