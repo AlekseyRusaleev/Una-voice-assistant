@@ -230,7 +230,9 @@ class WakeService : Service() {
         val frame = ShortArray(frameSize)
         val preroll = ArrayDeque<ShortArray>()
 
-        var nextWakeWordAllowed = Instant.MIN
+        // epoch millis, not Instant: Instant.MIN.toEpochMilli() overflows and threw on every
+        // detection, losing the wake-up entirely
+        var nextWakeWordAllowed = 0L
         var speechInProgress = false
         var silentMillis = 0L
         var lastHeardSecond = 0L
@@ -323,8 +325,8 @@ class WakeService : Service() {
                 WakeStats.onFrame()
 
                 val now = System.currentTimeMillis()
-                if (detected && now > nextWakeWordAllowed.toEpochMilli()) {
-                    nextWakeWordAllowed = Instant.ofEpochMilli(now + WAKE_WORD_BACKOFF_MILLIS)
+                if (detected && now > nextWakeWordAllowed) {
+                    nextWakeWordAllowed = now + WAKE_WORD_BACKOFF_MILLIS
                     onWakeWordDetected(ar)
                 }
 
