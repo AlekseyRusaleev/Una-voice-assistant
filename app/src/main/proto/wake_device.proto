@@ -7,4 +7,5 @@ enum WakeDevice {
   WAKE_DEVICE_UNSET = 0;
   WAKE_DEVICE_NOTHING = 1;
   WAKE_DEVICE_OWW = 2; // openWakeWord
+  WAKE_DEVICE_VAD = 3; // Silero VAD + GigaAM
 }

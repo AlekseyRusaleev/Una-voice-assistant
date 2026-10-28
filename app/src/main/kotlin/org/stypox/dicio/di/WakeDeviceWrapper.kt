@@ -19,11 +19,13 @@ import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import org.stypox.dicio.io.wake.WakeDevice
 import org.stypox.dicio.io.wake.WakeState
+import org.stypox.dicio.io.wake.vad.VadGigaAmWakeDevice
 import org.stypox.dicio.io.wake.vosk.VoskWakeDevice
 import org.stypox.dicio.settings.datastore.UserSettings
 import org.stypox.dicio.settings.datastore.WakeDevice.UNRECOGNIZED
 import org.stypox.dicio.settings.datastore.WakeDevice.WAKE_DEVICE_NOTHING
 import org.stypox.dicio.settings.datastore.WakeDevice.WAKE_DEVICE_OWW
+import org.stypox.dicio.settings.datastore.WakeDevice.WAKE_DEVICE_VAD
 import org.stypox.dicio.settings.datastore.WakeDevice.WAKE_DEVICE_UNSET
 import org.stypox.dicio.util.distinctUntilChangedBlockingFirst
 import javax.inject.Singleton
@@ -130,6 +132,7 @@ class WakeDeviceWrapperImpl(
             UNRECOGNIZED,
             WAKE_DEVICE_UNSET,
             WAKE_DEVICE_OWW -> VoskWakeDevice(appContext, okHttpClient)
+            WAKE_DEVICE_VAD -> VadGigaAmWakeDevice(appContext, okHttpClient)
             WAKE_DEVICE_NOTHING -> null
         }
     }

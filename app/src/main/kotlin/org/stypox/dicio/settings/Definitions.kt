@@ -130,6 +130,12 @@ fun wakeDevice() = ListSetting(
             description = stringResource(R.string.pref_wake_method_on_summary),
         ),
         ListSetting.Value(
+            value = WakeDevice.WAKE_DEVICE_VAD,
+            name = "Точный детектор (VAD + GigaAM)",
+            description = "Слушает только речь и распознаёт фразу целиком: меньше ложных, " +
+                "но отклик на полсекунды дольше",
+        ),
+        ListSetting.Value(
             value = WakeDevice.WAKE_DEVICE_NOTHING,
             name = stringResource(R.string.pref_wake_method_disabled),
         )

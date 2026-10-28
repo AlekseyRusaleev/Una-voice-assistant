@@ -562,7 +562,9 @@ class WakeService : Service() {
         // music. The accurate model is therefore always tried first; the inline decode is only a
         // fallback when it heard nothing at all.
         val inlineCommand = wakeDevice.takeDetectedCommand()
-        val transcribed = transcribeWithGigaAm(ar)
+        // with the VAD detector the whole phrase is already recognised, so a second pass would only
+        // add a second of latency and another model run
+        val transcribed = if (inlineCommand.isNullOrBlank()) transcribeWithGigaAm(ar) else false
         if (!transcribed && inlineCommand.isNullOrBlank()) {
             // Start listening and pass STT events to the skill evaluator.
             // Note that this works even if the MainActivity is opened later!
